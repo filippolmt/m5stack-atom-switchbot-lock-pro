@@ -10,6 +10,11 @@ from machine import Pin
 import gc
 
 try:
+    import ujson as json
+except ImportError:
+    import json
+
+try:
     from config import (
         WIFI_SSID,
         WIFI_PASSWORD,
@@ -44,7 +49,12 @@ class SwitchBotController:
         }
         
         # Comando per toggle lock
-        data = '{"command": "unlock", "parameter": "default", "commandType": "command"}'
+        payload = {
+            "command": "unlock",
+            "parameter": "default",
+            "commandType": "command"
+        }
+        data = json.dumps(payload)
         
         try:
             print("Invio comando al SwitchBot Lock Pro...")

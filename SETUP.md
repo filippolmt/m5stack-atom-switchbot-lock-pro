@@ -55,9 +55,10 @@ esptool.py version
 ### 2.1 Scaricare il Firmware MicroPython
 
 1. Vai su: https://micropython.org/download/ESP32_GENERIC/
-2. Scarica il firmware **v1.26.1** per ESP32:
-   - File: `ESP32_GENERIC-20241129-v1.24.1.bin` (o versione simile)
+2. Scarica il firmware più recente per ESP32 (v1.24.1 o successivo):
+   - File esempio: `ESP32_GENERIC-20241129-v1.24.1.bin`
    - Oppure usa: https://micropython.org/resources/firmware/ESP32_GENERIC-20241129-v1.24.1.bin
+   - Nota: Il codice è compatibile con MicroPython v1.24.x, v1.25.x e v1.26.x
 
 ### 2.2 Identificare la Porta Seriale
 

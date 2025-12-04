@@ -21,7 +21,7 @@ Questo progetto fornisce una soluzione completa per integrare il tuo M5Stack ATO
 - **SwitchBot Lock Pro** (configurato e funzionante)
 
 ### Software
-- **MicroPython v1.26.1** (o compatibile) per ESP32
+- **MicroPython v1.24.x o superiore** (testato con v1.24.1) per ESP32
 - **VS Code** con estensione MicroPython (MicroPico o Pymakr)
 - Python 3.x sul tuo computer
 - Account SwitchBot con API token
