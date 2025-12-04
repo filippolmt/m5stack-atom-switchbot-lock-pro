@@ -1,285 +1,280 @@
-# Guida Setup VS Code + MicroPython per M5Stack ATOM
+# VS Code + MicroPython Setup Guide for M5Stack ATOM
 
-Questa guida ti accompagnerà attraverso la configurazione completa dell'ambiente di sviluppo VS Code per programmare il tuo M5Stack ATOM con MicroPython e controllare il tuo SwitchBot Lock Pro.
+This guide walks you through the full VS Code development environment setup to program your M5Stack ATOM with MicroPython and control your SwitchBot Lock Pro.
 
-## 📋 Prerequisiti
+## 📋 Prerequisites
 
 ### Hardware
+
 - **M5Stack ATOM** (ESP32-PICO-D4)
-- Cavo USB Type-C
-- Computer con Windows, macOS o Linux
+- USB Type-C cable
+- Computer running Windows, macOS, or Linux
 
 ### Software
-- Python 3.x installato sul tuo computer
+
+- Python 3.x installed on your computer
 - VS Code (Visual Studio Code)
-- Driver USB per ESP32 (se necessario)
+- USB driver for ESP32 (if needed)
 
 ---
 
-## 🔧 Parte 1: Installazione Software
+## 🔧 Part 1: Software Installation
 
-### 1.1 Installare Visual Studio Code
+### 1.1 Install Visual Studio Code
 
-1. Scarica VS Code da: https://code.visualstudio.com/
-2. Installa seguendo le istruzioni per il tuo sistema operativo
-3. Avvia VS Code
+1. Download VS Code from: https://code.visualstudio.com/
+2. Install following the instructions for your OS
+3. Launch VS Code
 
-### 1.2 Installare l'estensione MicroPython
+### 1.2 Install the MicroPython Extension (optional)
 
-1. Apri VS Code
-2. Vai su Extensions (icona quadrata sulla barra laterale sinistra) o premi `Ctrl+Shift+X` (Windows/Linux) / `Cmd+Shift+X` (macOS)
-3. Cerca **"MicroPico"** o **"Pymakr"** (opzioni consigliate):
-   - **MicroPico** (consigliato per semplicità): by paulober
-   - **Pymakr** (più features): by Pycom
+1. Open VS Code
+2. Go to Extensions (square icon on the left sidebar) or press `Ctrl+Shift+X` (Windows/Linux) / `Cmd+Shift+X` (macOS)
+3. Search for **"MicroPico"** (by paulober) and click **Install** if you want IDE integration
 
-4. Clicca su "Install" per installare l'estensione
+### 1.3 Install esptool for flashing
 
-### 1.3 Installare esptool per il flashing
-
-Apri un terminale e installa `esptool`:
+Open a terminal and install `esptool`:
 
 ```bash
 pip install esptool
 ```
 
-Verifica l'installazione:
+Verify the installation:
 
 ```bash
-esptool.py version
+esptool version
 ```
 
 ---
 
-## 📥 Parte 2: Installare MicroPython sul M5Stack ATOM
+## 📥 Part 2: Install MicroPython on the M5Stack ATOM
 
-### 2.1 Scaricare il Firmware MicroPython
+### 2.1 Download the MicroPython Firmware
 
-1. Vai su: https://micropython.org/download/ESP32_GENERIC/
-2. Scarica il firmware più recente per ESP32 (v1.24.1 o successivo):
-   - File esempio: `ESP32_GENERIC-20241129-v1.24.1.bin`
-   - Oppure usa: https://micropython.org/resources/firmware/ESP32_GENERIC-20241129-v1.24.1.bin
-   - Nota: Il codice è compatibile con MicroPython v1.24.x, v1.25.x e v1.26.x
+1. Go to: https://micropython.org/download/M5STACK_ATOM/
+2. Download the latest firmware for ESP32 (v1.26.1 or later):
+   - Example file: `M5STACK_ATOM-20250911-v1.26.1.bin`
+   - Or use: https://micropython.org/resources/firmware/M5STACK_ATOM-20250911-v1.26.1.bin
 
-### 2.2 Identificare la Porta Seriale
+### 2.2 Identify the Serial Port
 
 **Windows:**
+
 ```bash
-# Nel Device Manager, cerca "Ports (COM & LPT)"
-# Annota la porta COM (es. COM3, COM4, ecc.)
+# In Device Manager, look under "Ports (COM & LPT)"
+# Note the COM port (e.g., COM3, COM4, etc.)
 ```
 
 **macOS/Linux:**
+
 ```bash
-ls /dev/tty.* # macOS
+ls /dev/cu.* # macOS
 ls /dev/ttyUSB* # Linux
 ```
 
-La porta dovrebbe essere simile a:
-- macOS: `/dev/tty.usbserial-xxxx` o `/dev/tty.SLAB_USBtoUART`
-- Linux: `/dev/ttyUSB0` o `/dev/ttyACM0`
+The port should look like:
 
-### 2.3 Flash del Firmware MicroPython
+- macOS: `/dev/cu.usbserial-xxxx` or `/dev/cu.SLAB_USBtoUART`
+- Linux: `/dev/ttyUSB0` or `/dev/ttyACM0`
 
-**Passo 1: Cancella la flash (importante!)**
+### 2.3 Flash the MicroPython Firmware
 
-```bash
-esptool.py --port COM3 erase_flash
-```
-
-Sostituisci `COM3` con la tua porta seriale.
-
-**Passo 2: Flash del firmware**
+**Step 1: Erase flash (important!)**
 
 ```bash
-esptool.py --chip esp32 --port COM3 --baud 460800 write_flash -z 0x1000 ESP32_GENERIC-20241129-v1.24.1.bin
+PORT="/dev/cu.usbserial-9152F26338" # Replace with your port
+esptool --port $PORT --baud 460800 erase-flash
 ```
 
-Sostituisci:
-- `COM3` con la tua porta
-- `ESP32_GENERIC-20241129-v1.24.1.bin` con il nome del file scaricato
-
-**Note:**
-- Durante il flash, potrebbe essere necessario tenere premuto il pulsante BOOT sull'M5Stack ATOM
-- Il processo richiede circa 30-60 secondi
-
-### 2.4 Verificare l'Installazione
-
-Usa un terminale seriale per verificare:
+**Step 2: Flash the firmware**
 
 ```bash
-# Installa screen (macOS/Linux) o usa PuTTY (Windows)
-screen /dev/tty.usbserial-xxxx 115200
-
-# Oppure usa Python
-python -m serial.tools.miniterm COM3 115200
+PORT="/dev/cu.usbserial-9152F26338" # Replace with your port
+esptool --port $PORT --baud 460800 write-flash 0x1000 M5STACK_ATOM-20250911-v1.26.1.bin
 ```
 
-Dovresti vedere il prompt MicroPython:
+Replace:
+
+- `$PORT` with your port
+- `M5STACK_ATOM-20250911-v1.26.1.bin` with the downloaded file name
+
+**Notes:**
+
+- During flashing, you may need to hold the BOOT button on the M5Stack ATOM
+- The process takes about 30-60 seconds
+
+### 2.4 Verify the Installation
+
+Use a serial terminal to verify:
+
+```bash
+# Install screen (macOS/Linux) or use PuTTY (Windows)
+screen $PORT 115200
+
+# Or use Python
+python -m serial.tools.miniterm $PORT 115200
+```
+
+You should see the MicroPython prompt:
+
 ```
 >>>
 ```
 
-Prova:
+Try:
+
 ```python
 >>> print("Hello M5Stack ATOM!")
 Hello M5Stack ATOM!
 ```
 
-Esci con `Ctrl+A` poi `K` (screen) o `Ctrl+]` (miniterm).
+Exit with `Ctrl+A` then `K` (screen) or `Ctrl+]` (miniterm).
 
 ---
 
-## 💻 Parte 3: Configurare VS Code per MicroPython
+## 💻 Part 3: Configure VS Code for MicroPython
 
-### 3.1 Configurare l'Estensione MicroPico
+### 3.1 Configure the MicroPico Extension (optional)
 
-1. Apri VS Code
-2. Premi `Ctrl+Shift+P` (Windows/Linux) o `Cmd+Shift+P` (macOS)
-3. Digita "MicroPico: Configure Project"
-4. Seleziona la porta seriale del tuo M5Stack ATOM
-5. Dovrebbe apparire una barra di stato in basso che mostra la connessione
-
-### 3.2 Oppure: Configurare Pymakr
-
-Se usi Pymakr:
-
-1. Clicca sull'icona Pymakr nella barra laterale
-2. Clicca su "Add Device"
-3. Seleziona la porta seriale
-4. La configurazione verrà salvata in `pymakr.conf`
+1. Open VS Code
+2. Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (macOS)
+3. Type "MicroPico: Configure Project"
+4. Select the serial port of your M5Stack ATOM
+5. A status bar should appear at the bottom showing the connection
 
 ---
 
-## 🔑 Parte 4: Ottenere le Credenziali SwitchBot
+## 🔑 Part 4: Obtain SwitchBot Credentials
 
-### 4.1 Ottenere il Token Bearer
+### 4.1 Get the Bearer Token and Secret
 
-1. Apri l'app **SwitchBot** sul tuo smartphone
-2. Vai su **Profilo** → **Impostazioni**
-3. Vai su **App Version** e tappa 10 volte
-4. Apparirà l'opzione **Developer Options**
-5. Entra in **Developer Options**
-6. Copia il **Token** (questo è il tuo Bearer Token)
+1. Open the **SwitchBot** app on your smartphone
+2. Go to **Profile** → **Settings**
+3. Go to **App Version** and tap 10 times
+4. The **Developer Options** entry appears
+5. Enter **Developer Options**
+6. Copy both **Token** and **Secret** (both are required for API v1.1 signing)
 
-### 4.2 Ottenere il Device ID
+### 4.2 Get the Device ID
 
-Il Device ID può essere ottenuto tramite API SwitchBot:
-
-**Metodo 1: Usando curl (Linux/macOS/Windows con Git Bash)**
-
-```bash
-curl -X GET "https://api.switch-bot.com/v1.1/devices" \
-  -H "Authorization: TUO_TOKEN_QUI"
-```
-
-**Metodo 2: Usando Python**
+Device listing on API v1.1 requires signed headers (token + secret). Use Python to generate the signature and call the API:
 
 ```python
 import requests
+import hmac
+import hashlib
+import base64
+import time
+import uuid
 
-token = "TUO_TOKEN_QUI"
-headers = {"Authorization": token}
+token = "YOUR_TOKEN_HERE"
+secret = "YOUR_SECRET_HERE"
+
+nonce = uuid.uuid4().hex
+t = str(int(time.time() * 1000))
+string_to_sign = token + t + nonce
+sign = base64.b64encode(
+    hmac.new(secret.encode(), string_to_sign.encode(), digestmod=hashlib.sha256).digest()
+).decode().upper()
+
+headers = {
+    "Authorization": token,
+    "sign": sign,
+    "nonce": nonce,
+    "t": t,
+}
+
 response = requests.get("https://api.switch-bot.com/v1.1/devices", headers=headers)
-print(response.json())
+print(response.status_code, response.text)
 ```
 
-Cerca il tuo **Lock Pro** nell'elenco dei dispositivi e copia il `deviceId`.
+Find your **Lock Pro** in the device list and copy the `deviceId`.
 
 ---
 
-## 🚀 Parte 5: Configurare e Caricare il Codice
+## 🚀 Part 5: Configure and Upload the Code
 
-### 5.1 Clonare/Scaricare questo Repository
+### 5.1 Clone/Download this Repository
 
 ```bash
 git clone https://github.com/filippolmt/m5stack-atom-switchbot-lock-pro.git
 cd m5stack-atom-switchbot-lock-pro
 ```
 
-Oppure scarica lo ZIP da GitHub e estrailo.
+Or download the ZIP from GitHub and extract it.
 
-### 5.2 Aprire il Progetto in VS Code
+### 5.2 Open the Project in VS Code
 
 ```bash
 code .
 ```
 
-Oppure: File → Open Folder → Seleziona la cartella del progetto
+Or: File → Open Folder → select the project folder
 
-### 5.3 Configurare le Credenziali
+### 5.3 Configure Credentials
 
-1. Copia il file `config_template.py` e rinominalo in `config.py`:
+1. Copy the file `config_template.py` and rename it to `config.py`:
 
 ```bash
 cp config_template.py config.py
 ```
 
-2. Apri `config.py` in VS Code
-3. Modifica con i tuoi dati:
+2. Open `config.py` in VS Code
+3. Edit with your data:
 
 ```python
-# Configurazione Wi-Fi
-WIFI_SSID = "NomeDelTuoWiFi"
-WIFI_PASSWORD = "PasswordDelTuoWiFi"
+# Wi-Fi configuration
+WIFI_SSID = "YourWiFiName"
+WIFI_PASSWORD = "YourWiFiPassword"
 
-# Configurazione SwitchBot API
-SWITCHBOT_TOKEN = "IlTuoBearerToken"
-SWITCHBOT_DEVICE_ID = "IlTuoDeviceID"
+# SwitchBot API configuration
+SWITCHBOT_TOKEN = "YourBearerToken"
+SWITCHBOT_SECRET = "YourTokenSecret"
+SWITCHBOT_DEVICE_ID = "YourDeviceID"
 
-# Configurazione GPIO (lascia invariato per M5Stack ATOM)
-BUTTON_GPIO = 39  # GPIO39 è il pulsante integrato
+# GPIO configuration (leave as is for M5Stack ATOM)
+BUTTON_GPIO = 39  # GPIO39 is the built-in button
 
-# Configurazione debounce (in millisecondi)
+# Debounce configuration (in milliseconds)
 DEBOUNCE_MS = 200
 ```
 
-4. Salva il file
+4. Save the file
 
-### 5.4 Caricare i File sul M5Stack ATOM
+### 5.4 Upload Files to the M5Stack ATOM (mpremote)
 
-**Usando MicroPico:**
-
-1. Assicurati che il dispositivo sia connesso (vedi barra di stato in basso)
-2. Apri `config.py`
-3. Premi `Ctrl+Shift+P` e seleziona "MicroPico: Upload current file to Pico"
-4. Ripeti per `main.py`
-
-**Usando Pymakr:**
-
-1. Clicca con il tasto destro sulla cartella del progetto
-2. Seleziona "Upload project to device"
-3. Attendi il completamento del caricamento
-
-**Usando ampy (alternativa da command line):**
+Use `mpremote` to copy the files (replace the port with yours, e.g., `/dev/cu.usbserial-XXXX` on macOS, `COM3` on Windows, `/dev/ttyUSB0` on Linux):
 
 ```bash
-# Installa ampy
-pip install adafruit-ampy
-
-# Carica i file
-ampy --port COM3 put config.py
-ampy --port COM3 put main.py
+mpremote connect /dev/cu.usbserial-XXXX cp main.py :main.py
+mpremote connect /dev/cu.usbserial-XXXX cp config.py :config.py
 ```
 
-### 5.5 Eseguire il Programma
+### 5.5 Run the Program
 
-**Opzione 1: Esecuzione automatica**
+**Option 1: Run via mpremote**
 
-Rinomina `main.py` in modo che venga eseguito automaticamente al boot:
 ```bash
-# Il file main.py viene già eseguito automaticamente da MicroPython
+mpremote connect /dev/cu.usbserial-XXXX run main.py
 ```
 
-**Opzione 2: Esecuzione manuale via REPL**
+**Option 2: Automatic execution at boot**
 
-1. Apri il terminale seriale in VS Code (o usa screen/miniterm)
-2. Nel prompt `>>>`, digita:
+```bash
+# main.py is already executed automatically by MicroPython
+```
+
+**Option 3: Manual execution via REPL**
+
+1. Open the serial terminal in VS Code (or use screen/miniterm)
+2. In the `>>>` prompt, type:
 
 ```python
 >>> import main
 ```
 
-Oppure:
+Or:
 
 ```python
 >>> exec(open('main.py').read())
@@ -287,58 +282,59 @@ Oppure:
 
 ---
 
-## 🎮 Parte 6: Utilizzo
+## 🎮 Usage
 
-### 6.1 Prima Esecuzione
+### 6.1 First Run
 
-Al primo avvio, dovresti vedere nel terminale seriale:
+On first start, you should see in the serial terminal:
 
 ```
 ==================================================
 M5Stack ATOM - SwitchBot Lock Pro Controller
 ==================================================
-Connessione a Wi-Fi: NomeDelTuoWiFi...
+Connecting to Wi-Fi: YourWiFi...
 ....
-✓ Connesso a Wi-Fi!
-Configurazione rete:
+✓ Connected to Wi-Fi!
+Network configuration:
   IP:      192.168.1.100
   Netmask: 255.255.255.0
   Gateway: 192.168.1.1
   DNS:     192.168.1.1
 
-✓ Controller SwitchBot inizializzato
+✓ SwitchBot controller initialized
   Device ID: xxxxxxxxxxxxx
-✓ Pulsante configurato su GPIO39
+✓ Button configured on GPIO39
   Debounce: 200ms
-  Trigger: IRQ_FALLING (pressione)
+  Trigger: IRQ_FALLING (press)
 
 ==================================================
-Sistema pronto! Premi il pulsante per toggle lock.
+System ready! Press the button to toggle lock.
 ==================================================
 ```
 
-### 6.2 Uso Normale
+### 6.2 Normal Use
 
-1. **Premi il pulsante** sull'M5Stack ATOM (il pulsante centrale)
-2. Il sistema invierà un comando al SwitchBot Lock Pro
-3. Nel terminale vedrai:
+1. **Press the button** on the M5Stack ATOM (center button)
+2. The system sends a command to the SwitchBot Lock Pro
+3. In the terminal you will see:
 
 ```
->>> Pulsante premuto! <<<
-Invio comando al SwitchBot Lock Pro...
-✓ Comando inviato con successo! Status: 200
-Risposta: {"statusCode":100,"body":{},"message":"success"}
+>>> Button pressed! <<<
+Sending command to SwitchBot Lock Pro...
+✓ Command sent successfully! Status: 200
+Response: {"statusCode":100,"body":{},"message":"success"}
 ```
 
-### 6.3 Verificare lo Stato del Sistema
+### 6.3 Check System State
 
-Puoi accedere al REPL MicroPython mentre il programma è in esecuzione:
+You can access the MicroPython REPL while the program is running:
 
-1. Premi `Ctrl+C` per interrompere il loop
-2. Vedrai il prompt `>>>`
-3. Puoi eseguire comandi Python o ispezionare variabili
+1. Press `Ctrl+C` to stop the loop
+2. You will see the `>>>` prompt
+3. You can run Python commands or inspect variables
 
-Per riavviare:
+To restart:
+
 ```python
 >>> import main
 ```
@@ -347,104 +343,95 @@ Per riavviare:
 
 ## 🔍 Troubleshooting
 
-### Problema: Non riesco a connettermi al dispositivo
+### Problem: Cannot connect to the device
 
-**Soluzione:**
-- Verifica che il cavo USB sia funzionante (prova un altro cavo)
-- Installa i driver USB: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
-- Su Linux, aggiungi il tuo utente al gruppo `dialout`:
+**Solution:**
+
+- Make sure the USB cable works (try another cable)
+- Install USB drivers: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
+- On Linux, add your user to the `dialout` group:
   ```bash
   sudo usermod -a -G dialout $USER
   ```
-  Poi riavvia il sistema
+  Then restart the system
 
-### Problema: Errore durante il flash del firmware
+### Problem: Error while flashing the firmware
 
-**Soluzione:**
-- Prova a ridurre il baud rate: usa `--baud 115200` invece di `460800`
-- Tieni premuto il pulsante BOOT durante il flash
-- Usa un cavo USB di qualità migliore
+**Solution:**
 
-### Problema: Wi-Fi non si connette
+- Try lowering the baud rate: use `--baud 115200` instead of `460800`
+- Hold the BOOT button during flashing
+- Use a higher quality USB cable
 
-**Soluzione:**
-- Verifica SSID e password in `config.py`
-- Assicurati che il Wi-Fi sia 2.4GHz (ESP32 non supporta 5GHz)
-- Verifica che il router sia raggiungibile
+### Problem: Wi-Fi does not connect
 
-### Problema: Errore API SwitchBot (status != 200)
+**Solution:**
 
-**Soluzione:**
-- Verifica che il token sia corretto (copia-incolla attentamente)
-- Verifica che il Device ID sia corretto
-- Il comando potrebbe richiedere `"unlock"` o `"lock"` a seconda dello stato attuale
-- Controlla i log della risposta API per dettagli
+- Check SSID and password in `config.py`
+- Make sure Wi-Fi is 2.4GHz (ESP32 does not support 5GHz)
+- Verify the router is reachable
 
-### Problema: Il pulsante non risponde
+### Problem: SwitchBot API error (status != 200)
 
-**Soluzione:**
-- Verifica che il GPIO sia corretto (39 per M5Stack ATOM)
-- Prova ad aumentare il valore di `DEBOUNCE_MS` in `config.py`
-- Controlla i log seriali per errori
+**Solution:**
 
-### Problema: Out of Memory
+- Check that the token is correct (copy/paste carefully)
+- Check that the Device ID is correct
+- The command may need to be `"unlock"` or `"lock"` depending on current state
+- Check the API response logs for details
 
-**Soluzione:**
-- Il codice include `gc.collect()` per la gestione della memoria
-- Se continui ad avere problemi, riavvia il dispositivo
-- Considera di ridurre il numero di richieste consecutive
+### Problem: The button does not respond
+
+**Solution:**
+
+- Verify the GPIO is correct (39 for M5Stack ATOM)
+- Try increasing the `DEBOUNCE_MS` value in `config.py`
+- Check the serial logs for errors
+
+### Problem: Out of Memory
+
+**Solution:**
+
+- The code includes `gc.collect()` for memory management
+- If issues continue, reboot the device
+- Consider reducing the number of consecutive requests
 
 ---
 
-## 📚 Risorse Utili
+## 📚 Useful Resources
 
-### Documentazione
+### Documentation
+
 - **MicroPython:** https://docs.micropython.org/
 - **ESP32 MicroPython:** https://docs.micropython.org/en/latest/esp32/quickref.html
 - **SwitchBot API:** https://github.com/OpenWonderLabs/SwitchBotAPI
 - **M5Stack ATOM:** https://docs.m5stack.com/en/core/atom_lite
 
 ### Community
+
 - **MicroPython Forum:** https://forum.micropython.org/
 - **M5Stack Community:** https://community.m5stack.com/
 
 ### Tools
-- **Thonny IDE:** Alternativa a VS Code, più semplice per principianti: https://thonny.org/
-- **mpremote:** Tool ufficiale MicroPython: `pip install mpremote`
+
+- **Thonny IDE:** Simpler alternative to VS Code for beginners: https://thonny.org/
+- **mpremote:** Official MicroPython tool: `pip install mpremote`
 
 ---
 
-## 🔒 Note di Sicurezza
+## 🔒 Security Notes
 
-⚠️ **IMPORTANTE:**
+⚠️ **IMPORTANT:**
 
-1. **NON committare `config.py` su Git!** Contiene credenziali sensibili
-   - Il file è già incluso in `.gitignore`
+1. **Do NOT commit `config.py` to Git!** It contains sensitive credentials
 
-2. **Proteggi il tuo Bearer Token:**
-   - Non condividerlo pubblicamente
-   - Non includerlo in screenshot o log pubblici
+   - The file is already included in `.gitignore`
 
-3. **Wi-Fi sicuro:**
-   - Usa WPA2/WPA3 per il tuo Wi-Fi
-   - Non usare reti pubbliche per dispositivi IoT
+2. **Protect your Bearer Token:**
 
----
+   - Do not share it publicly
+   - Do not include it in screenshots or public logs
 
-## 🆘 Supporto
-
-Se hai problemi o domande:
-
-1. Controlla la sezione Troubleshooting sopra
-2. Verifica i log seriali per messaggi di errore dettagliati
-3. Apri una Issue su GitHub: https://github.com/filippolmt/m5stack-atom-switchbot-lock-pro/issues
-
----
-
-## 📝 Licenza
-
-Vedi il file `LICENSE` nella root del repository.
-
----
-
-**Buon coding! 🚀**
+3. **Secure Wi-Fi:**
+   - Use WPA2/WPA3 for your Wi-Fi
+   - Do not use public networks for IoT devices

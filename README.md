@@ -1,184 +1,173 @@
 # M5Stack ATOM - SwitchBot Lock Pro Controller
 
-Controlla il tuo **SwitchBot Lock Pro** premendo semplicemente il pulsante del tuo **M5Stack ATOM**! 🚪🔐
+Control your **SwitchBot Lock Pro** by simply pressing the button on your **M5Stack ATOM**! 🚪🔐
 
-Questo progetto fornisce una soluzione completa per integrare il tuo M5Stack ATOM (ESP32) con l'API SwitchBot per controllare un SwitchBot Lock Pro tramite Wi-Fi.
+This project provides a complete solution to integrate your M5Stack ATOM (ESP32) with the SwitchBot API and control a SwitchBot Lock Pro over Wi-Fi.
 
-## 🌟 Caratteristiche
+## 🌟 Features
 
-- ✅ **Connessione Wi-Fi** automatica con configurazione semplice
-- ✅ **Lettura pulsante GPIO** con interrupt e debounce hardware
-- ✅ **Integrazione API SwitchBot** con autenticazione Bearer token
-- ✅ **Gestione memoria** ottimizzata per ESP32
-- ✅ **Codice robusto** con gestione errori completa
-- ✅ **Setup guidato** completo per VS Code + MicroPython
+- ✅ **Automatic Wi-Fi connection** with simple configuration
+- ✅ **GPIO button handling** with interrupt and hardware debounce
+- ✅ **SwitchBot API integration** with Bearer token authentication
+- ✅ **Memory management** optimized for ESP32
+- ✅ **Robust code** with thorough error handling
+- ✅ **Complete setup guide** for VS Code + MicroPython
 
-## 📋 Requisiti
+## 📋 Requirements
 
 ### Hardware
+
 - **M5Stack ATOM** (ESP32-PICO-D4)
-- Cavo USB Type-C
-- **SwitchBot Lock Pro** (configurato e funzionante)
+- USB Type-C cable
+- **SwitchBot Lock Pro** (set up and working)
 
 ### Software
-- **MicroPython v1.24.x o superiore** (testato con v1.24.1) per ESP32
-- **VS Code** con estensione MicroPython (MicroPico o Pymakr)
-- Python 3.x sul tuo computer
-- Account SwitchBot con API token
+
+- **MicroPython v1.24.x or later** (tested with v1.24.1) for ESP32
+- **VS Code** (optional) for editing
+- `mpremote` for file upload and execution
+- Python 3.x on your computer
+- SwitchBot account with API token and secret (for API v1.1 signing)
 
 ## 🚀 Quick Start
 
-### 1. Setup Ambiente (Prima Volta)
+### 1. Environment Setup (First Time)
 
-Segui la guida completa in **[SETUP.md](SETUP.md)** per:
-- Installare VS Code e l'estensione MicroPython
-- Flashare MicroPython sul tuo M5Stack ATOM
-- Configurare l'ambiente di sviluppo
-- Ottenere le credenziali SwitchBot (Token e Device ID)
+Follow the full guide in **[SETUP.md](SETUP.md)** to:
 
-### 2. Configurazione
+- Install VS Code and the MicroPython extension
+- Flash MicroPython onto your M5Stack ATOM
+- Configure the development environment
+- Obtain SwitchBot credentials (Token and Device ID)
+
+### 2. Configuration
 
 ```bash
-# Clona il repository
+# Clone the repository
 git clone https://github.com/filippolmt/m5stack-atom-switchbot-lock-pro.git
 cd m5stack-atom-switchbot-lock-pro
 
-# Copia e configura il file di configurazione
+# Copy and configure the settings file
 cp config_template.py config.py
 ```
 
-Modifica `config.py` con i tuoi dati:
+Edit `config.py` with your details:
 
 ```python
-# Configurazione Wi-Fi
-WIFI_SSID = "TuoSSID"
-WIFI_PASSWORD = "TuaPassword"
+# Wi-Fi configuration
+WIFI_SSID = "YourSSID"
+WIFI_PASSWORD = "YourPassword"
 
-# Configurazione SwitchBot API
-SWITCHBOT_TOKEN = "TuoBearerToken"
-SWITCHBOT_DEVICE_ID = "TuoDeviceID"
+# SwitchBot API configuration
+SWITCHBOT_TOKEN = "YourBearerToken"
+SWITCHBOT_SECRET = "YourTokenSecret"
+SWITCHBOT_DEVICE_ID = "YourDeviceID"
 
-# GPIO pulsante M5Stack ATOM (già preconfigurato)
+# M5Stack ATOM button GPIO (preconfigured)
 BUTTON_GPIO = 39
 ```
 
-### 3. Upload sul Dispositivo
+### 3. Upload to the Device (mpremote)
 
-1. Apri il progetto in VS Code
-2. Connetti il M5Stack ATOM via USB
-3. Carica i file sul dispositivo:
-   - `config.py`
-   - `main.py`
+1. Connect the M5Stack ATOM via USB and identify the serial port (e.g., `/dev/cu.usbserial-XXXX` on macOS, `COM3` on Windows, `/dev/ttyUSB0` on Linux).
+2. Upload the files with `mpremote` (replace the port with yours):
+   ```bash
+   mpremote connect /dev/cu.usbserial-XXXX cp main.py :main.py
+   mpremote connect /dev/cu.usbserial-XXXX cp config.py :config.py
+   ```
 
-### 4. Esegui!
+### 4. Run It
 
-Il programma si avvia automaticamente. Premi il pulsante sull'M5Stack ATOM per controllare il lock!
+Execute the script via `mpremote`:
 
-## 📁 Struttura del Progetto
+```bash
+mpremote connect /dev/cu.usbserial-XXXX run main.py
+```
+
+Then press the button on the M5Stack ATOM to control the lock.
+
+## 📁 Project Structure
 
 ```
 .
-├── main.py              # Script principale MicroPython
-├── config_template.py   # Template di configurazione
-├── config.py           # Configurazione (da creare, non in git)
-├── SETUP.md            # Guida setup completa
-├── README.md           # Questo file
-├── LICENSE             # Licenza
-└── .gitignore          # Esclude config.py e altri file sensibili
+├── main.py              # Main MicroPython script
+├── config_template.py   # Configuration template
+├── config.py            # Configuration (create locally, not in git)
+├── SETUP.md             # Full setup guide
+├── README.md            # This file
+├── LICENSE              # License
+└── .gitignore           # Excludes config.py and other sensitive files
 ```
 
-## 🔧 Come Funziona
+## 🔧 How It Works
 
-1. **All'avvio**: Il dispositivo si connette automaticamente al Wi-Fi configurato
-2. **Inizializzazione**: Configura il controller SwitchBot e il pulsante GPIO
-3. **Loop principale**: Rimane in ascolto di pressioni del pulsante
-4. **Quando premi il pulsante**: 
-   - Debounce hardware evita pressioni multiple accidentali
-   - Invia una richiesta POST all'API SwitchBot
-   - Toggle dello stato del lock (unlock/lock)
-   - Mostra il risultato nel terminale seriale
+1. **On boot**: the device automatically connects to the configured Wi-Fi
+2. **Initialization**: sets up the SwitchBot controller and the GPIO button
+3. **Main loop**: listens for button presses
+4. **When you press the button**:
+   - Hardware debounce avoids accidental multiple presses
+   - Sends a POST request to the SwitchBot API
+   - Toggles the lock state (unlock/lock)
+   - Shows the result in the serial terminal
 
-## 📡 API SwitchBot
+## 📡 SwitchBot API
 
-Il progetto utilizza l'API SwitchBot v1.1:
+The project uses the SwitchBot API v1.1:
 
 - **Endpoint**: `https://api.switch-bot.com/v1.1/devices/{deviceId}/commands`
-- **Autenticazione**: Bearer token
-- **Comando**: `unlock` (toggle basato sullo stato attuale)
+- **Authentication**: token + secret with signed headers (`Authorization`, `sign`, `nonce`, `t`)
+- **Command**: `unlock` (toggle based on current state)
 
-Documentazione completa: https://github.com/OpenWonderLabs/SwitchBotAPI
+Full documentation: https://github.com/OpenWonderLabs/SwitchBotAPI
 
-## 🔍 Monitoring e Debug
+## 🔍 Monitoring and Debug
 
-Connetti al terminale seriale (115200 baud) per vedere:
+Connect to the serial terminal (115200 baud) to see:
 
 ```
 ==================================================
 M5Stack ATOM - SwitchBot Lock Pro Controller
 ==================================================
-Connessione a Wi-Fi: MioWiFi...
-✓ Connesso a Wi-Fi!
-Configurazione rete:
+Connecting to Wi-Fi: MyWiFi...
+✓ Connected to Wi-Fi!
+Network configuration:
   IP:      192.168.1.100
   ...
 
-✓ Controller SwitchBot inizializzato
-✓ Pulsante configurato su GPIO39
+✓ SwitchBot controller initialized
+✓ Button configured on GPIO39
 
 ==================================================
-Sistema pronto! Premi il pulsante per toggle lock.
+System ready! Press the button to toggle the lock.
 ==================================================
 
->>> Pulsante premuto! <<<
-Invio comando al SwitchBot Lock Pro...
-✓ Comando inviato con successo! Status: 200
+>>> Button pressed! <<<
+Sending command to SwitchBot Lock Pro...
+✓ Command sent successfully! Status: 200
 ```
 
 ## 🛠️ Troubleshooting
 
-Consulta la sezione **Troubleshooting** in [SETUP.md](SETUP.md) per:
-- Problemi di connessione al dispositivo
-- Errori durante il flash del firmware
-- Problemi di connessione Wi-Fi
-- Errori API SwitchBot
-- Problemi con il pulsante
-- Gestione memoria
+See the **Troubleshooting** section in [SETUP.md](SETUP.md) for:
 
-## 🔒 Sicurezza
+- Connection issues with the device
+- Errors while flashing the firmware
+- Wi-Fi connection problems
+- SwitchBot API errors
+- Button issues
+- Memory handling
 
-⚠️ **IMPORTANTE:**
+## 🔒 Security
 
-- `config.py` contiene credenziali sensibili ed è escluso da Git
-- Non condividere il tuo Bearer Token
-- Usa una rete Wi-Fi sicura (WPA2/WPA3)
-- Considera l'uso di una VLAN dedicata per dispositivi IoT
+⚠️ **IMPORTANT:**
 
-## 🤝 Contribuire
+- `config.py` contains sensitive credentials and is excluded from Git
+- Do not share your Bearer Token
+- Use a secure Wi-Fi network (WPA2/WPA3)
+- Consider using a dedicated VLAN for IoT devices
 
-Contributi sono benvenuti! Per favore:
+## 🙏 Acknowledgements
 
-1. Fai un fork del progetto
-2. Crea un branch per la tua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit le tue modifiche (`git commit -m 'Add some AmazingFeature'`)
-4. Push al branch (`git push origin feature/AmazingFeature`)
-5. Apri una Pull Request
-
-## 📝 Licenza
-
-Distribuito sotto licenza MIT. Vedi `LICENSE` per maggiori informazioni.
-
-## 🙏 Riconoscimenti
-
-- [MicroPython](https://micropython.org/) - Python per microcontrollori
-- [M5Stack](https://m5stack.com/) - Hardware ESP32 di qualità
+- [MicroPython](https://micropython.org/) - Python for microcontrollers
+- [M5Stack](https://m5stack.com/) - Quality ESP32 hardware
 - [SwitchBot](https://www.switch-bot.com/) - Smart home devices
-
-## 📞 Supporto
-
-- 📖 [Guida Setup Completa](SETUP.md)
-- 🐛 [Segnala un Bug](https://github.com/filippolmt/m5stack-atom-switchbot-lock-pro/issues)
-- 💬 [Discussioni](https://github.com/filippolmt/m5stack-atom-switchbot-lock-pro/discussions)
-
----
-
-**Made with ❤️ for the IoT community**
