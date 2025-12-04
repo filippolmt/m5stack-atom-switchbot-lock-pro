@@ -1,16 +1,17 @@
-# Configurazione per M5Stack ATOM - SwitchBot Lock Pro
-# Copia questo file in config.py e modifica con i tuoi dati
+# Configuration for M5Stack ATOM - SwitchBot Lock Pro
+# Copy this file to config.py and edit with your data
 
-# Configurazione Wi-Fi
-WIFI_SSID = "TuoSSID"
-WIFI_PASSWORD = "TuaPassword"
+# Wi-Fi configuration
+WIFI_SSID = "[ENTER_SSID]"
+WIFI_PASSWORD = "[ENTER_PASSWORD]"
 
-# Configurazione SwitchBot API
-SWITCHBOT_TOKEN = "TuoBearerToken"
-SWITCHBOT_DEVICE_ID = "TuoDeviceID"
+# SwitchBot API configuration
+SWITCHBOT_TOKEN = "[ENTER_TOKEN]"
+SWITCHBOT_SECRET = "[ENTER_SECRET]"
+SWITCHBOT_DEVICE_ID = "[ENTER_DEVICE_ID_LOCK_PRO]"
 
-# Configurazione GPIO
-BUTTON_GPIO = 39  # GPIO39 è il pulsante integrato su M5Stack ATOM
+# GPIO configuration
+BUTTON_GPIO = 39  # GPIO39 is the built-in button on M5Stack ATOM
 
-# Configurazione debounce (in millisecondi)
+# Debounce configuration (milliseconds)
 DEBOUNCE_MS = 200
