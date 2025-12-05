@@ -84,6 +84,9 @@ except ImportError:
     raise
 
 
+UNIX_EPOCH_OFFSET = 946684800  # Seconds between 1970-01-01 and MicroPython epoch (2000-01-01)
+
+
 def sync_time_via_ntp():
     """Sync the system clock via NTP (needed for the correct timestamp)."""
     try:
@@ -198,8 +201,9 @@ class SwitchBotController:
         - nonce: random string
         - t: timestamp in milliseconds (string)
         """
-        # Timestamp in milliseconds (13 digits)
-        t_ms = int(time.time() * 1000)
+        # SwitchBot expects UNIX epoch (1970). MicroPython's epoch starts at 2000,
+        # so add the offset to avoid an invalid signature.
+        t_ms = int((time.time() + UNIX_EPOCH_OFFSET) * 1000)
         nonce = self._generate_nonce()
 
         data_str = "{}{}{}".format(self.token, t_ms, nonce)
@@ -207,8 +211,8 @@ class SwitchBotController:
             self.secret.encode("utf-8"), data_str.encode("utf-8")
         )
 
-        # Base64 and upper-case (as in the official examples)
-        sign_b64 = ubinascii.b2a_base64(digest).strip().decode().upper()
+        # Base64 signature (keep original case; changing case breaks the signature)
+        sign_b64 = ubinascii.b2a_base64(digest).strip().decode()
 
         headers = {
             "Authorization": self.token,
