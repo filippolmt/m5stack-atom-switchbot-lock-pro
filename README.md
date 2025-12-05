@@ -8,7 +8,7 @@ This project provides a complete solution to integrate your M5Stack ATOM (ESP32)
 
 - ✅ **Automatic Wi-Fi connection** with simple configuration
 - ✅ **GPIO button handling** with interrupt and hardware debounce
-- ✅ **SwitchBot API integration** with Bearer token authentication
+- ✅ **SwitchBot API v1.1** with signed token + secret headers
 - ✅ **Memory management** optimized for ESP32
 - ✅ **Robust code** with thorough error handling
 - ✅ **Complete setup guide** for VS Code + MicroPython
@@ -107,7 +107,7 @@ Then press the button on the M5Stack ATOM to control the lock.
 4. **When you press the button**:
    - Hardware debounce avoids accidental multiple presses
    - Sends a POST request to the SwitchBot API
-   - Toggles the lock state (unlock/lock)
+   - Issues a fixed **unlock** command (always unlocks the lock)
    - Shows the result in the serial terminal
 
 ## 📡 SwitchBot API
@@ -115,8 +115,14 @@ Then press the button on the M5Stack ATOM to control the lock.
 The project uses the SwitchBot API v1.1:
 
 - **Endpoint**: `https://api.switch-bot.com/v1.1/devices/{deviceId}/commands`
-- **Authentication**: token + secret with signed headers (`Authorization`, `sign`, `nonce`, `t`)
-- **Command**: `unlock` (toggle based on current state)
+- **Authentication**: token + secret with signed headers:
+  - `Authorization`: your token
+  - `nonce`: random hex string
+  - `t`: Unix timestamp in milliseconds (1970 epoch)
+  - `sign`: Base64(HMAC-SHA256(token + t + nonce, secret))
+- **Command**: `unlock` (always unlocks the lock)
+
+MicroPython on ESP32 uses the 2000-01-01 epoch internally. The code converts it to the Unix epoch (1970) before signing and retries an NTP sync if the RTC year looks wrong before sending a command. If the timestamp is off you will get a `401 Unauthorized` from the API.
 
 Full documentation: https://github.com/OpenWonderLabs/SwitchBotAPI
 
@@ -138,7 +144,7 @@ Network configuration:
 ✓ Button configured on GPIO39
 
 ==================================================
-System ready! Press the button to toggle the lock.
+System ready! Press the button to unlock the door.
 ==================================================
 
 >>> Button pressed! <<<

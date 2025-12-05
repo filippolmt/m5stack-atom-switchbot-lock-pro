@@ -68,6 +68,9 @@ try:
 except ImportError:
     import json
 
+# MicroPython on ESP32 uses epoch 2000-01-01. SwitchBot needs Unix epoch (1970).
+_UNIX_EPOCH_OFFSET_SECONDS = 946684800  # seconds between 1970-01-01 and 2000-01-01
+
 try:
     from config import (
         WIFI_SSID,
@@ -84,8 +87,6 @@ except ImportError:
     raise
 
 
-
-
 def sync_time_via_ntp():
     """Sync the system clock via NTP (needed for the correct timestamp)."""
     try:
@@ -96,9 +97,45 @@ def sync_time_via_ntp():
         print("✓ Time synchronized via NTP (UTC).")
     except Exception as e:
         print("✗ Unable to synchronize time via NTP:", e)
-        print(
-            "  WARNING: if the clock is wrong, the SwitchBot API can reply with 401."
-        )
+        print("  WARNING: if the clock is wrong, the SwitchBot API can reply with 401.")
+
+
+def ensure_time_synced(min_year=2023):
+    """
+    Ensure the RTC has a sensible UTC year before signing requests.
+    Returns True if the time looks valid; otherwise tries NTP once.
+    """
+    try:
+        current_year = time.gmtime()[0]
+        if current_year < min_year:
+            print(f"Clock seems unsynchronized (year={current_year}). Trying NTP...")
+            sync_time_via_ntp()
+            current_year = time.gmtime()[0]
+
+        if current_year < min_year:
+            print(
+                f"Clock still invalid after NTP (year={current_year}). Aborting request."
+            )
+            return False
+        return True
+    except Exception as e:
+        print("✗ Unable to verify system time:", e)
+        return False
+
+
+def unix_time_ms():
+    """
+    Return current Unix time in milliseconds.
+    MicroPython on ESP32 reports seconds from 2000-01-01, so convert when needed.
+    """
+    seconds = time.time()
+    # Detect MicroPython epoch (2000) and adjust to Unix epoch (1970)
+    try:
+        if time.gmtime(0)[0] == 2000:
+            seconds += _UNIX_EPOCH_OFFSET_SECONDS
+    except Exception:
+        pass
+    return int(seconds * 1000)
 
 
 def hmac_sha256_digest(secret_bytes, msg_bytes):
@@ -201,7 +238,7 @@ class SwitchBotController:
         - t: timestamp in milliseconds (string)
         """
         # SwitchBot expects UNIX epoch (1970). After NTP sync, time.time() is correct.
-        t_ms = int(time.time() * 1000)
+        t_ms = unix_time_ms()
         nonce = self._generate_nonce()
 
         data_str = "{}{}{}".format(self.token, t_ms, nonce)
@@ -209,8 +246,8 @@ class SwitchBotController:
             self.secret.encode("utf-8"), data_str.encode("utf-8")
         )
 
-        # Base64 signature (keep original case; changing case breaks the signature)
-        sign_b64 = ubinascii.b2a_base64(digest).strip().decode()
+        # SwitchBot API v1.1 requires the Base64-encoded HMAC signature in uppercase
+        sign_b64 = ubinascii.b2a_base64(digest).strip().decode().upper()
 
         headers = {
             "Authorization": self.token,
@@ -224,6 +261,9 @@ class SwitchBotController:
     def toggle_lock(self):
         """Send UNLOCK command to the SwitchBot Lock Pro. Returns True/False."""
         url = f"{self.API_BASE_URL}/devices/{self.device_id}/commands"
+
+        if not ensure_time_synced():
+            return False
 
         headers = self._build_auth_headers()
 
