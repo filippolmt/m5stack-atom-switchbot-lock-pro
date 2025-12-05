@@ -84,7 +84,6 @@ except ImportError:
     raise
 
 
-UNIX_EPOCH_OFFSET = 946684800  # Seconds between 1970-01-01 and MicroPython epoch (2000-01-01)
 
 
 def sync_time_via_ntp():
