@@ -201,9 +201,8 @@ class SwitchBotController:
         - nonce: random string
         - t: timestamp in milliseconds (string)
         """
-        # SwitchBot expects UNIX epoch (1970). MicroPython's epoch starts at 2000,
-        # so add the offset to avoid an invalid signature.
-        t_ms = int((time.time() + UNIX_EPOCH_OFFSET) * 1000)
+        # SwitchBot expects UNIX epoch (1970). After NTP sync, time.time() is correct.
+        t_ms = int(time.time() * 1000)
         nonce = self._generate_nonce()
 
         data_str = "{}{}{}".format(self.token, t_ms, nonce)
