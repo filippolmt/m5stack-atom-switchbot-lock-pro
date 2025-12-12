@@ -147,7 +147,7 @@ Exit with `Ctrl+A` then `K` (screen) or `Ctrl+]` (miniterm).
 
 ## 🔑 Part 4: Obtain SwitchBot Credentials
 
-### 4.1 Get the Bearer Token and Secret
+### 4.1 Get the Token and Secret
 
 1. Open the **SwitchBot** app on your smartphone
 2. Go to **Profile** → **Settings**
@@ -229,15 +229,12 @@ WIFI_SSID = "YourWiFiName"
 WIFI_PASSWORD = "YourWiFiPassword"
 
 # SwitchBot API configuration
-SWITCHBOT_TOKEN = "YourBearerToken"
+SWITCHBOT_TOKEN = "YourToken"
 SWITCHBOT_SECRET = "YourTokenSecret"
 SWITCHBOT_DEVICE_ID = "YourDeviceID"
 
 # GPIO configuration (leave as is for M5Stack ATOM)
 BUTTON_GPIO = 39  # GPIO39 is the built-in button
-
-# Debounce configuration (in milliseconds)
-DEBOUNCE_MS = 200
 ```
 
 4. Save the file
@@ -290,54 +287,76 @@ On first start, you should see in the serial terminal:
 
 ```
 ==================================================
-M5Stack ATOM - SwitchBot Lock Pro Controller
+M5Stack ATOM Lite - SwitchBot Lock Pro Controller
+          (Deep Sleep Version)
 ==================================================
-Connecting to Wi-Fi: YourWiFi...
-....
-✓ Connected to Wi-Fi!
-Network configuration:
-  IP:      192.168.1.100
-  Netmask: 255.255.255.0
-  Gateway: 192.168.1.1
-  DNS:     192.168.1.1
 
-✓ SwitchBot controller initialized
-  Device ID: xxxxxxxxxxxxx
-✓ Button configured on GPIO39
-  Debounce: 200ms
-  Trigger: IRQ_FALLING (press)
+Device ID: xxxxxxxxxxxxx
+Wake button: GPIO39
+Long press threshold: 1000ms
 
-==================================================
-System ready! Press the button to toggle lock.
+Controls:
+  Short press (<1s) = UNLOCK (green LED)
+  Long press  (>1s) = LOCK   (purple LED)
+
+Entering deep sleep...
+  Wake trigger: GPIO39 LOW (button press)
+  Power consumption: ~10uA
 ==================================================
 ```
+
+The device immediately enters deep sleep mode to conserve power.
 
 ### 6.2 Normal Use
 
-1. **Press the button** on the M5Stack ATOM (center button)
-2. The system sends a command to the SwitchBot Lock Pro
-3. In the terminal you will see:
+**To UNLOCK the door:**
+1. **Short press** the button (< 1 second)
+2. LED turns **green** while holding
+3. Release the button
+
+**To LOCK the door:**
+1. **Long press** the button (≥ 1 second)
+2. LED turns **purple** after 1 second
+3. Release the button
+
+In the terminal you will see:
 
 ```
->>> Button pressed! <<<
-Sending command to SwitchBot Lock Pro...
-✓ Command sent successfully! Status: 200
-Response: {"statusCode":100,"body":{},"message":"success"}
+==================================================
+WAKE FROM DEEP SLEEP - Button pressed!
+==================================================
+Button held for 450ms
+Action: UNLOCK
+Fast reconnect (ch=6)... OK!
+✓ RTC time valid, skipping NTP sync
+
+Sending UNLOCK command...
+HTTP status: 200
+✓ Door unlocked successfully!
+
+Entering deep sleep...
 ```
 
-### 6.3 Check System State
+### 6.3 LED Feedback Guide
 
-You can access the MicroPython REPL while the program is running:
+| LED Color | Meaning |
+|-----------|---------|
+| 🟢 Green (holding) | Short press detected - will UNLOCK |
+| 🟣 Purple (holding) | Long press detected - will LOCK |
+| 🔵 Blue | Connecting to Wi-Fi |
+| 🩵 Cyan | Fast reconnect in progress |
+| 🟢 Green (2 blinks) | Unlock successful |
+| 🟣 Purple (2 blinks) | Lock successful |
+| 🟠 Orange (3 blinks) | Wi-Fi timeout |
+| 🔴 Red (3 blinks) | API error |
+| 🔴 Red (6 fast blinks) | Authentication error |
 
-1. Press `Ctrl+C` to stop the loop
-2. You will see the `>>>` prompt
-3. You can run Python commands or inspect variables
+### 6.4 Deep Sleep Mode
 
-To restart:
-
-```python
->>> import main
-```
+The device uses deep sleep to minimize power consumption:
+- **Sleep consumption:** ~10uA
+- **Active consumption:** ~80-150mA (only during button press)
+- The device wakes on button press, performs the action, then returns to sleep
 
 ---
 
@@ -385,8 +404,9 @@ To restart:
 **Solution:**
 
 - Verify the GPIO is correct (39 for M5Stack ATOM)
-- Try increasing the `DEBOUNCE_MS` value in `config.py`
+- Make sure the device is in deep sleep (not stuck in an error state)
 - Check the serial logs for errors
+- Try resetting the device by unplugging and replugging USB
 
 ### Problem: Out of Memory
 
@@ -427,7 +447,7 @@ To restart:
 
    - The file is already included in `.gitignore`
 
-2. **Protect your Bearer Token:**
+2. **Protect your Token:**
 
    - Do not share it publicly
    - Do not include it in screenshots or public logs
