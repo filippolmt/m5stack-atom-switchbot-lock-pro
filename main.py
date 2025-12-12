@@ -1,21 +1,30 @@
 """
-M5Stack ATOM Lite - SwitchBot Lock Pro Controller
-- Wi-Fi connection
+M5Stack ATOM Lite - SwitchBot Lock Pro Controller (Deep Sleep Version)
+- Deep sleep for minimal power consumption (~10uA)
+- Wake on button press (GPIO 39)
+- Wi-Fi connection only when needed
 - SwitchBot API v1.1 authentication (token + secret + HMAC-SHA256)
-- Physical button (built-in or external) for UNLOCK
 - LED feedback:
     - Solid green while sending the command
     - If HTTP 200: green for 1s, then OFF
     - If HTTP != 200: 3 red blinks, then OFF
+- Returns to deep sleep after command execution
 """
 
 import network
 import urequests
 import time
-from machine import Pin
+from machine import Pin, deepsleep, reset_cause, DEEPSLEEP_RESET, freq
+import esp32
 import gc
 import ubinascii
 import hashlib
+
+# RTC memory layout for fast reconnect:
+# Bytes 0-5: BSSID (6 bytes)
+# Byte 6: Wi-Fi channel (1 byte)
+# Byte 7: Valid flag (0xAA = valid)
+_RTC_VALID_FLAG = 0xAA
 
 # Try to use hmac if available, otherwise fall back to the manual version
 try:
@@ -79,7 +88,6 @@ try:
         SWITCHBOT_SECRET,
         SWITCHBOT_DEVICE_ID,
         BUTTON_GPIO,
-        DEBOUNCE_MS,
     )
 except ImportError:
     print("ERROR: File config.py not found!")
@@ -100,7 +108,7 @@ def sync_time_via_ntp():
         print("  WARNING: if the clock is wrong, the SwitchBot API can reply with 401.")
 
 
-def ensure_time_synced(min_year=2023):
+def ensure_time_synced(min_year=2024):
     """
     Ensure the RTC has a sensible UTC year before signing requests.
     Returns True if the time looks valid; otherwise tries NTP once.
@@ -121,6 +129,61 @@ def ensure_time_synced(min_year=2023):
     except Exception as e:
         print("✗ Unable to verify system time:", e)
         return False
+
+
+def is_time_valid(min_year=2024):
+    """Check if RTC time is already valid (survives deep sleep)."""
+    try:
+        return time.gmtime()[0] >= min_year
+    except Exception:
+        return False
+
+
+# --------------------- RTC MEMORY FOR FAST RECONNECT --------------------- #
+
+
+def save_wifi_config(bssid, channel):
+    """
+    Save Wi-Fi BSSID and channel to RTC memory for fast reconnect.
+    RTC memory survives deep sleep.
+    """
+    try:
+        from machine import RTC
+        data = bytearray(8)
+        if isinstance(bssid, bytes) and len(bssid) == 6:
+            data[0:6] = bssid
+        data[6] = channel & 0xFF
+        data[7] = _RTC_VALID_FLAG
+        RTC().memory(data)
+    except Exception as e:
+        print(f"Could not save Wi-Fi config: {e}")
+
+
+def load_wifi_config():
+    """
+    Load Wi-Fi config from RTC memory.
+    Returns (bssid, channel) or (None, None) if not available.
+    """
+    try:
+        from machine import RTC
+        data = RTC().memory()
+        if data and len(data) >= 8 and data[7] == _RTC_VALID_FLAG:
+            bssid = bytes(data[0:6])
+            channel = data[6]
+            if channel > 0 and channel <= 14:
+                return bssid, channel
+    except Exception:
+        pass
+    return None, None
+
+
+def clear_wifi_config():
+    """Clear saved Wi-Fi config from RTC memory."""
+    try:
+        from machine import RTC
+        RTC().memory(bytearray(8))
+    except Exception:
+        pass
 
 
 def unix_time_ms():
@@ -185,26 +248,57 @@ class StatusLED:
     def off(self):
         self.set_rgb(0, 0, 0)
 
+    # Solid colors
     def green(self):
-        # Moderate green
         self.set_rgb(0, 255, 0)
 
     def red(self):
         self.set_rgb(255, 0, 0)
 
-    def blink_red(self, times=3, on_ms=200, off_ms=200):
+    def blue(self):
+        self.set_rgb(0, 0, 255)
+
+    def yellow(self):
+        self.set_rgb(255, 255, 0)
+
+    def orange(self):
+        self.set_rgb(255, 128, 0)
+
+    def purple(self):
+        self.set_rgb(128, 0, 255)
+
+    def cyan(self):
+        self.set_rgb(0, 255, 255)
+
+    # Blink methods
+    def _blink(self, color_func, times, on_ms, off_ms):
         for _ in range(times):
-            self.red()
+            color_func()
             time.sleep_ms(on_ms)
             self.off()
             time.sleep_ms(off_ms)
 
+    def blink_red(self, times=3, on_ms=200, off_ms=200):
+        self._blink(self.red, times, on_ms, off_ms)
+
     def blink_green(self, times=1, on_ms=300, off_ms=100):
-        for _ in range(times):
-            self.green()
-            time.sleep_ms(on_ms)
-            self.off()
-            time.sleep_ms(off_ms)
+        self._blink(self.green, times, on_ms, off_ms)
+
+    def blink_blue(self, times=2, on_ms=200, off_ms=200):
+        self._blink(self.blue, times, on_ms, off_ms)
+
+    def blink_yellow(self, times=2, on_ms=300, off_ms=200):
+        self._blink(self.yellow, times, on_ms, off_ms)
+
+    def blink_orange(self, times=3, on_ms=300, off_ms=200):
+        self._blink(self.orange, times, on_ms, off_ms)
+
+    def blink_purple(self, times=2, on_ms=200, off_ms=200):
+        self._blink(self.purple, times, on_ms, off_ms)
+
+    def blink_fast_red(self, times=6, on_ms=100, off_ms=100):
+        """Fast red blink for auth errors (401)"""
+        self._blink(self.red, times, on_ms, off_ms)
 
 
 # --------------------- SWITCHBOT CONTROLLER --------------------- #
@@ -219,10 +313,6 @@ class SwitchBotController:
         self.token = token
         self.secret = secret
         self.device_id = device_id
-        self.last_button_time = 0
-        self.debounce_ms = DEBOUNCE_MS
-        self.button_event = False  # flag set by the IRQ
-        self.busy = False  # true while an HTTP request is running
 
     def _generate_nonce(self):
         """Generate a random nonce (hex string)."""
@@ -258,111 +348,88 @@ class SwitchBotController:
         }
         return headers
 
-    def toggle_lock(self):
-        """Send UNLOCK command to the SwitchBot Lock Pro. Returns True/False."""
+    def send_command(self, command="unlock", retries=1):
+        """
+        Send lock/unlock command to the SwitchBot Lock Pro.
+
+        Args:
+            command: "unlock" or "lock" (default: "unlock")
+            retries: Number of retry attempts on failure (default: 1)
+
+        Returns:
+            str: Result code - "success", "auth_error", "api_error",
+                 "time_error", "network_error"
+        """
         url = f"{self.API_BASE_URL}/devices/{self.device_id}/commands"
 
         if not ensure_time_synced():
-            return False
+            return "time_error"
 
-        headers = self._build_auth_headers()
-
-        # Command to open the door (unlock)
+        # Command to lock or unlock the door
         payload = {
-            "command": "unlock",
+            "command": command,
             "parameter": "default",
             "commandType": "command",
         }
         data = json.dumps(payload)
 
-        try:
-            print("Sending UNLOCK command to SwitchBot Lock Pro...")
-            response = urequests.post(url, headers=headers, data=data)
+        for attempt in range(retries + 1):
+            if attempt > 0:
+                print(f"Retry {attempt}/{retries}...")
+                time.sleep_ms(500)  # Brief delay before retry
 
-            if response is None:
-                print("✗ No response from the API.")
-                return False
+            # Regenerate headers for each attempt (fresh timestamp/nonce)
+            headers = self._build_auth_headers()
 
             try:
-                status = response.status_code
-                text = response.text
-            except Exception:
-                status = -1
-                text = "<no text>"
+                cmd_upper = command.upper()
+                print(f"Sending {cmd_upper} command to SwitchBot Lock Pro...")
+                response = urequests.post(url, headers=headers, data=data)
 
-            print("HTTP status:", status)
-            print("Response body:", text)
+                if response is None:
+                    print("✗ No response from the API.")
+                    gc.collect()
+                    continue  # Retry
 
-            result = status == 200
+                try:
+                    status = response.status_code
+                    text = response.text
+                except Exception:
+                    status = -1
+                    text = "<no text>"
 
-            response.close()
-            gc.collect()
-            return result
+                print("HTTP status:", status)
+                print("Response body:", text)
 
-        except Exception as e:
-            print(f"✗ Exception while sending the command: {e}")
-            gc.collect()
-            return False
+                response.close()
+                gc.collect()
 
-    # ---- BUTTON HANDLING ---- #
+                if status == 200:
+                    return "success"
 
-    def button_handler(self, pin):
-        """
-        IRQ handler: does NOT make HTTP calls.
-        It only sets a flag if:
-        - debounce time has passed
-        - the button is actually LOW
-        - there isn't already a request in progress (busy)
-        """
-        current_time = time.ticks_ms()
+                # Don't retry on auth errors (401) - won't help
+                if status == 401:
+                    print("✗ Authentication failed (401). Check token/secret.")
+                    return "auth_error"
 
-        if time.ticks_diff(current_time, self.last_button_time) > self.debounce_ms:
-            if pin.value() == 0 and not self.busy:
-                self.last_button_time = current_time
-                self.button_event = True
+            except Exception as e:
+                print(f"✗ Exception while sending the command: {e}")
+                gc.collect()
+                continue  # Retry
 
-    def process_button_event(self, led):
-        """
-        Call from the main loop.
-        If button_event is True, runs UNLOCK once
-        with LED feedback.
-        """
-        if not self.button_event or self.busy:
-            return
-
-        # Consume the event
-        self.button_event = False
-        self.busy = True
-
-        print("\n>>> Button pressed! Starting UNLOCK sequence...")
-
-        # Solid green LED: sending the command
-        led.green()
-
-        # API call
-        success = self.toggle_lock()
-
-        if success:
-            print("✓ API returned 200, unlocking door.")
-            # Keep green on for 1 second
-            time.sleep(1)
-            led.off()
-        else:
-            print("✗ API did not return 200, error.")
-            # 3 red blinks
-            led.off()
-            led.blink_red(times=3, on_ms=200, off_ms=200)
-            led.off()
-
-        self.busy = False
+        return "api_error"
 
 
-# --------------------- WIFI & BUTTON SETUP --------------------- #
+
+# --------------------- WIFI SETUP --------------------- #
 
 
-def connect_wifi(ssid, password, timeout=20):
+def connect_wifi(ssid, password, timeout=10):
     """
-    Connect the device to the Wi-Fi network
+    Connect the device to the Wi-Fi network with fast reconnect support.
+
+    Uses cached BSSID/channel from RTC memory for faster reconnection
+    after deep sleep (~1-2s faster).
 
     Args:
         ssid: Wi-Fi network name
@@ -380,104 +447,302 @@ def connect_wifi(ssid, password, timeout=20):
         print(f"IP: {wlan.ifconfig()[0]}")
         return True
 
+    # Try fast reconnect using cached BSSID/channel
+    cached_bssid, cached_channel = load_wifi_config()
+    if cached_bssid and cached_channel:
+        print(f"Fast reconnect (ch={cached_channel})...", end="")
+        try:
+            # Some MicroPython builds support bssid parameter
+            wlan.connect(ssid, password)
+        except Exception:
+            wlan.connect(ssid, password)
+
+        # Short timeout for fast reconnect
+        start = time.ticks_ms()
+        while not wlan.isconnected():
+            if time.ticks_diff(time.ticks_ms(), start) > 4000:  # 4s fast timeout
+                print(" timeout")
+                wlan.disconnect()
+                clear_wifi_config()  # Clear invalid cache
+                break
+            time.sleep_ms(100)
+
+        if wlan.isconnected():
+            print(" OK!")
+            print(f"  IP: {wlan.ifconfig()[0]}")
+            return True
+
+        print("Fast reconnect failed, trying normal scan...")
+
+    # Normal connection with full scan
     print(f"Connecting to Wi-Fi: {ssid}...")
     wlan.connect(ssid, password)
 
     start_time = time.time()
     while not wlan.isconnected():
         if time.time() - start_time > timeout:
-            print("✗ Wi-Fi connection timeout!")
+            print("\n✗ Wi-Fi connection timeout!")
             return False
-        time.sleep(0.5)
+        time.sleep_ms(200)
         print(".", end="")
 
     print("\n✓ Connected to Wi-Fi!")
-    print("Network configuration:")
-    print(f"  IP:      {wlan.ifconfig()[0]}")
-    print(f"  Netmask: {wlan.ifconfig()[1]}")
-    print(f"  Gateway: {wlan.ifconfig()[2]}")
-    print(f"  DNS:     {wlan.ifconfig()[3]}")
+    print(f"  IP: {wlan.ifconfig()[0]}")
+
+    # Save BSSID and channel for next fast reconnect
+    try:
+        bssid = wlan.config('mac')  # Connected AP's BSSID
+        # Get channel from scan results or config
+        scan_results = wlan.scan()
+        for ap in scan_results:
+            if ap[0].decode() == ssid:
+                channel = ap[2]
+                save_wifi_config(bssid, channel)
+                print(f"  Cached ch={channel} for fast reconnect")
+                break
+    except Exception as e:
+        print(f"  Could not cache Wi-Fi config: {e}")
 
     return True
 
 
-def setup_button(gpio_num, controller):
+def enter_deep_sleep(button_gpio):
     """
-    Configure the GPIO button with interrupt and debounce
+    Configure wake-on-button and enter deep sleep.
 
     Args:
-        gpio_num: GPIO pin number
-        controller: SwitchBotController instance
+        button_gpio: GPIO pin number for wake button
+    """
+    print("\nEntering deep sleep...")
+    print(f"  Wake trigger: GPIO{button_gpio} LOW (button press)")
+    print("  Power consumption: ~10uA")
+    print("=" * 50)
+
+    # Configure wake on EXT0 (single pin, level-triggered)
+    # GPIO 39 is RTC_GPIO3, supports deep sleep wake
+    # Note: GPIO 39 is input-only, has external pull-up on ATOM Lite
+    wake_pin = Pin(button_gpio, Pin.IN)
+    esp32.wake_on_ext0(pin=wake_pin, level=esp32.WAKEUP_ALL_LOW)
+
+    # Small delay to allow serial output to flush
+    time.sleep_ms(100)
+
+    # Enter deep sleep indefinitely (wake only on button)
+    deepsleep()
+
+
+def set_cpu_freq(mhz):
+    """Set CPU frequency in MHz. Valid: 80, 160, 240."""
+    try:
+        freq(mhz * 1_000_000)
+    except Exception:
+        pass
+
+
+# Duration threshold for long press (milliseconds)
+LONG_PRESS_MS = 1000
+
+
+def measure_button_press(button_gpio, led, timeout_ms=5000):
+    """
+    Measure how long the button is held after wake.
+    Shows visual feedback during measurement.
+
+    Args:
+        button_gpio: GPIO pin number of button
+        led: StatusLED instance for feedback
+        timeout_ms: Maximum time to wait for release
 
     Returns:
-        Configured Pin object
+        int: Duration in milliseconds, or timeout_ms if not released
     """
-    # Button on ATOM Lite: active LOW with internal pull-up
-    button = Pin(gpio_num, Pin.IN, Pin.PULL_UP)
+    # GPIO 39 is input-only, has external pull-up on ATOM Lite
+    button = Pin(button_gpio, Pin.IN)
+    start = time.ticks_ms()
 
-    # Falling-edge interrupt
-    button.irq(trigger=Pin.IRQ_FALLING, handler=controller.button_handler)
+    # Wait for button release, showing feedback
+    while button.value() == 0:  # Button pressed = LOW
+        elapsed = time.ticks_diff(time.ticks_ms(), start)
 
-    print(f"✓ Button configured on GPIO{gpio_num}")
-    print(f"  Debounce: {controller.debounce_ms}ms")
-    print("  Trigger: IRQ_FALLING (press)")
+        # Visual feedback: green for short, purple for long
+        if elapsed < LONG_PRESS_MS:
+            led.green()  # Short press = unlock
+        else:
+            led.purple()  # Long press = lock
 
-    return button
+        if elapsed > timeout_ms:
+            break
+        time.sleep_ms(50)
+
+    duration = time.ticks_diff(time.ticks_ms(), start)
+    led.off()
+    return duration
+
+
+def handle_button_wake(led):
+    """
+    Handle wake from deep sleep due to button press.
+    Measures press duration to determine lock vs unlock:
+    - Short press (<1s): UNLOCK
+    - Long press (>=1s): LOCK
+
+    LED Color Feedback:
+    - Green (while holding): Short press detected (unlock)
+    - Purple (while holding): Long press detected (lock)
+    - Blue: Connecting to Wi-Fi (normal scan)
+    - Cyan: Fast reconnect in progress
+    - Green (2 blinks): Unlock success
+    - Purple (2 blinks): Lock success
+    - Yellow (2 blinks): NTP sync failed (continuing anyway)
+    - Orange (3 blinks): Wi-Fi timeout
+    - Red (3 blinks): API error
+    - Red fast (6 blinks): Auth error (401)
+
+    Args:
+        led: StatusLED instance
+
+    Returns:
+        str: Result code from send_command or "wifi_error"
+    """
+    print("\n" + "=" * 50)
+    print("WAKE FROM DEEP SLEEP - Button pressed!")
+    print("=" * 50)
+
+    # Measure button press duration (with visual feedback)
+    press_duration = measure_button_press(BUTTON_GPIO, led)
+    is_lock = press_duration >= LONG_PRESS_MS
+    command = "lock" if is_lock else "unlock"
+
+    print(f"Button held for {press_duration}ms")
+    print(f"Action: {command.upper()}")
+
+    # Boost CPU for Wi-Fi operations
+    set_cpu_freq(160)
+
+    # Check if fast reconnect is available
+    cached_bssid, cached_channel = load_wifi_config()
+    if cached_bssid and cached_channel:
+        led.cyan()  # Cyan = fast reconnect
+        print(f"Fast reconnect available (ch={cached_channel})")
+    else:
+        led.blue()  # Blue = normal Wi-Fi scan
+
+    # Connect to Wi-Fi (uses fast reconnect if available)
+    if not connect_wifi(WIFI_SSID, WIFI_PASSWORD, timeout=10):
+        print("✗ Cannot connect to Wi-Fi")
+        led.off()
+        led.blink_orange(times=3, on_ms=300, off_ms=200)
+        set_cpu_freq(80)
+        return "wifi_error"
+
+    # Wi-Fi connected - show action color
+    if is_lock:
+        led.purple()
+    else:
+        led.green()
+
+    # Only sync NTP if time is invalid (RTC survives deep sleep)
+    ntp_ok = True
+    if is_time_valid():
+        print("✓ RTC time valid, skipping NTP sync")
+    else:
+        print("RTC time invalid, syncing NTP...")
+        try:
+            sync_time_via_ntp()
+            if not is_time_valid():
+                ntp_ok = False
+        except Exception:
+            ntp_ok = False
+
+        if not ntp_ok:
+            print("⚠ NTP sync failed, attempting anyway...")
+            led.off()
+            led.blink_yellow(times=2, on_ms=300, off_ms=200)
+            if is_lock:
+                led.purple()
+            else:
+                led.green()
+
+    # Initialize controller and send command (with 1 retry)
+    controller = SwitchBotController(
+        SWITCHBOT_TOKEN, SWITCHBOT_SECRET, SWITCHBOT_DEVICE_ID
+    )
+
+    print(f"\nSending {command.upper()} command...")
+    result = controller.send_command(command=command, retries=1)
+
+    # LED feedback based on result
+    led.off()
+    if result == "success":
+        if is_lock:
+            print("✓ Door locked successfully!")
+            led.blink_purple(times=2, on_ms=300, off_ms=100)
+        else:
+            print("✓ Door unlocked successfully!")
+            led.blink_green(times=2, on_ms=300, off_ms=100)
+    elif result == "auth_error":
+        print("✗ Authentication error (401)")
+        led.blink_fast_red(times=6, on_ms=100, off_ms=100)
+    elif result == "time_error":
+        print("✗ Time sync error")
+        led.blink_yellow(times=4, on_ms=200, off_ms=200)
+    else:  # api_error or other
+        print("✗ API error")
+        led.blink_red(times=3, on_ms=200, off_ms=200)
+
+    led.off()
+
+    # Disconnect Wi-Fi to save power before sleep
+    wlan = network.WLAN(network.STA_IF)
+    wlan.disconnect()
+    wlan.active(False)
+
+    # Return to low power CPU freq
+    set_cpu_freq(80)
+
+    gc.collect()
+    return result
 
 
 # --------------------- MAIN --------------------- #
 
 
 def main():
-    """Main entry point"""
-    print("\n" + "=" * 50)
-    print("M5Stack ATOM Lite - SwitchBot Lock Pro Controller")
-    print("=" * 50)
+    """
+    Main entry point - Deep Sleep Version
 
-    # Initialize status LED
+    Flow:
+    1. Check if waking from deep sleep (button press)
+    2. If yes: measure press duration, lock or unlock, return to sleep
+    3. If no (fresh boot): show startup message, go to sleep
+    """
+    # Initialize status LED first for immediate feedback
     led = StatusLED(pin_num=27, brightness=64)
+
+    # Check wake reason
+    if reset_cause() == DEEPSLEEP_RESET:
+        # Woke up from deep sleep = button was pressed
+        handle_button_wake(led)
+    else:
+        # Fresh boot (power on or reset)
+        print("\n" + "=" * 50)
+        print("M5Stack ATOM Lite - SwitchBot Lock Pro Controller")
+        print("          (Deep Sleep Version)")
+        print("=" * 50)
+        print(f"\nDevice ID: {SWITCHBOT_DEVICE_ID}")
+        print(f"Wake button: GPIO{BUTTON_GPIO}")
+        print(f"Long press threshold: {LONG_PRESS_MS}ms")
+        print("\nControls:")
+        print("  Short press (<1s) = UNLOCK (green LED)")
+        print("  Long press  (>1s) = LOCK   (purple LED)")
+
+        # Brief LED flash to indicate ready (green then purple)
+        led.blink_green(times=1, on_ms=300, off_ms=100)
+        led.blink_purple(times=1, on_ms=300, off_ms=100)
+
+    # Always return to deep sleep
     led.off()
-
-    # Connect to Wi-Fi
-    if not connect_wifi(WIFI_SSID, WIFI_PASSWORD):
-        print("Cannot continue without Wi-Fi connection")
-        # Solid red LED indicates a critical error
-        led.red()
-        return
-
-    # Sync time to have the correct timestamp
-    sync_time_via_ntp()
-    print()
-
-    # Initialize the SwitchBot controller
-    controller = SwitchBotController(
-        SWITCHBOT_TOKEN, SWITCHBOT_SECRET, SWITCHBOT_DEVICE_ID
-    )
-    print("✓ SwitchBot controller initialized")
-    print(f"  Device ID: {SWITCHBOT_DEVICE_ID}")
-
-    # Configure the button
-    _button = setup_button(BUTTON_GPIO, controller)
-
-    print("\n" + "=" * 50)
-    print("System ready!")
-    print("Press the button ONCE to unlock the door.")
-    print("Green LED: command sending / success.")
-    print("3 red blinks: API error.")
-    print("=" * 50 + "\n")
-
-    # Main loop - keep the program running
-    try:
-        while True:
-            # Handle any button press
-            controller.process_button_event(led)
-            time.sleep_ms(50)  # lightweight loop
-    except KeyboardInterrupt:
-        print("\n\nKeyboard interrupt. Shutting down...")
-    finally:
-        print("Cleaning up resources...")
-        led.off()
-        gc.collect()
+    enter_deep_sleep(BUTTON_GPIO)
 
 
 # Start the main program

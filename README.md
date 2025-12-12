@@ -6,11 +6,13 @@ This project provides a complete solution to integrate your M5Stack ATOM (ESP32)
 
 ## 🌟 Features
 
-- ✅ **Automatic Wi-Fi connection** with simple configuration
-- ✅ **GPIO button handling** with interrupt and hardware debounce
+- ✅ **Deep sleep mode** - Ultra-low power consumption (~10uA idle vs ~80mA active)
+- ✅ **Wake on button press** - ESP32 wakes from deep sleep when button is pressed
+- ✅ **On-demand Wi-Fi** - Connects only when needed, disconnects before sleep
+- ✅ **Fast reconnect** - Caches Wi-Fi config for ~1-2s faster reconnection
+- ✅ **Multicolor LED feedback** - Different colors indicate status and errors
 - ✅ **SwitchBot API v1.1** with signed token + secret headers
-- ✅ **Memory management** optimized for ESP32
-- ✅ **Robust code** with thorough error handling
+- ✅ **Auto retry** - Retries API call once on failure
 - ✅ **Complete setup guide** for VS Code + MicroPython
 
 ## 📋 Requirements
@@ -59,7 +61,7 @@ WIFI_SSID = "YourSSID"
 WIFI_PASSWORD = "YourPassword"
 
 # SwitchBot API configuration
-SWITCHBOT_TOKEN = "YourBearerToken"
+SWITCHBOT_TOKEN = "YourToken"
 SWITCHBOT_SECRET = "YourTokenSecret"
 SWITCHBOT_DEVICE_ID = "YourDeviceID"
 
@@ -101,14 +103,42 @@ Then press the button on the M5Stack ATOM to control the lock.
 
 ## 🔧 How It Works
 
-1. **On boot**: the device automatically connects to the configured Wi-Fi
-2. **Initialization**: sets up the SwitchBot controller and the GPIO button
-3. **Main loop**: listens for button presses
-4. **When you press the button**:
-   - Hardware debounce avoids accidental multiple presses
-   - Sends a POST request to the SwitchBot API
-   - Issues a fixed **unlock** command (always unlocks the lock)
-   - Shows the result in the serial terminal
+1. **On boot/reset**: Shows startup message, then enters deep sleep (~10uA)
+2. **When you press the button**:
+   - ESP32 wakes from deep sleep
+   - **Short press (<1s)** = UNLOCK (green LED while holding)
+   - **Long press (≥1s)** = LOCK (purple LED while holding)
+   - Connects to Wi-Fi (fast reconnect if cached)
+   - Syncs time via NTP (skipped if RTC valid)
+   - Sends lock/unlock command to SwitchBot API
+   - LED feedback based on result
+   - Disconnects Wi-Fi and returns to deep sleep
+3. **Power consumption**:
+   - Deep sleep: ~10uA (can run months on battery)
+   - Active (Wi-Fi + API call): ~80-150mA for 2-5 seconds
+
+## 🎮 Button Controls
+
+| Press Duration | Action | LED While Holding |
+|----------------|--------|-------------------|
+| **< 1 second** | UNLOCK | 🟢 Green |
+| **≥ 1 second** | LOCK | 🟣 Purple |
+
+## 💡 LED Color Guide
+
+| Color | Meaning |
+|-------|---------|
+| 🟢 **Green (holding)** | Short press - will UNLOCK |
+| 🟣 **Purple (holding)** | Long press - will LOCK |
+| 🔵 **Blue** | Connecting to Wi-Fi (normal scan) |
+| 🩵 **Cyan** | Fast reconnect in progress |
+| 🟢 **Green (2 blinks)** | Door unlocked successfully |
+| 🟣 **Purple (2 blinks)** | Door locked successfully |
+| 🟡 **Yellow (2 blinks)** | NTP sync failed (continuing anyway) |
+| 🟡 **Yellow (4 blinks)** | Time sync error |
+| 🟠 **Orange (3 blinks)** | Wi-Fi connection timeout |
+| 🔴 **Red (3 blinks)** | API error |
+| 🔴 **Red (6 fast blinks)** | Authentication error (401) |
 
 ## 📡 SwitchBot API
 
@@ -120,7 +150,7 @@ The project uses the SwitchBot API v1.1:
   - `nonce`: random hex string
   - `t`: Unix timestamp in milliseconds (1970 epoch)
   - `sign`: Base64(HMAC-SHA256(token + t + nonce, secret))
-- **Command**: `unlock` (always unlocks the lock)
+- **Commands**: `unlock` or `lock`
 
 MicroPython on ESP32 uses the 2000-01-01 epoch internally. The code converts it to the Unix epoch (1970) before signing and retries an NTP sync if the RTC year looks wrong before sending a command. If the timestamp is off you will get a `401 Unauthorized` from the API.
 
@@ -130,26 +160,59 @@ Full documentation: https://github.com/OpenWonderLabs/SwitchBotAPI
 
 Connect to the serial terminal (115200 baud) to see:
 
+**Fresh boot:**
 ```
 ==================================================
-M5Stack ATOM - SwitchBot Lock Pro Controller
-==================================================
-Connecting to Wi-Fi: MyWiFi...
-✓ Connected to Wi-Fi!
-Network configuration:
-  IP:      192.168.1.100
-  ...
-
-✓ SwitchBot controller initialized
-✓ Button configured on GPIO39
-
-==================================================
-System ready! Press the button to unlock the door.
+M5Stack ATOM Lite - SwitchBot Lock Pro Controller
+          (Deep Sleep Version)
 ==================================================
 
->>> Button pressed! <<<
-Sending command to SwitchBot Lock Pro...
-✓ Command sent successfully! Status: 200
+Device ID: XXXXXXXXXXXX
+Wake button: GPIO39
+Long press threshold: 1000ms
+
+Controls:
+  Short press (<1s) = UNLOCK (green LED)
+  Long press  (>1s) = LOCK   (purple LED)
+
+Entering deep sleep...
+  Wake trigger: GPIO39 LOW (button press)
+  Power consumption: ~10uA
+==================================================
+```
+
+**Short press - UNLOCK:**
+```
+==================================================
+WAKE FROM DEEP SLEEP - Button pressed!
+==================================================
+Button held for 450ms
+Action: UNLOCK
+Fast reconnect (ch=6)... OK!
+✓ RTC time valid, skipping NTP sync
+
+Sending UNLOCK command...
+HTTP status: 200
+✓ Door unlocked successfully!
+
+Entering deep sleep...
+```
+
+**Long press - LOCK:**
+```
+==================================================
+WAKE FROM DEEP SLEEP - Button pressed!
+==================================================
+Button held for 1523ms
+Action: LOCK
+Fast reconnect (ch=6)... OK!
+✓ RTC time valid, skipping NTP sync
+
+Sending LOCK command...
+HTTP status: 200
+✓ Door locked successfully!
+
+Entering deep sleep...
 ```
 
 ## 🛠️ Troubleshooting
@@ -168,7 +231,7 @@ See the **Troubleshooting** section in [SETUP.md](SETUP.md) for:
 ⚠️ **IMPORTANT:**
 
 - `config.py` contains sensitive credentials and is excluded from Git
-- Do not share your Bearer Token
+- Do not share your Token or Secret
 - Use a secure Wi-Fi network (WPA2/WPA3)
 - Consider using a dedicated VLAN for IoT devices
 
