@@ -8,11 +8,15 @@ This project provides a complete solution to integrate your M5Stack ATOM (ESP32)
 
 - ✅ **Deep sleep mode** - Ultra-low power consumption (~10uA idle vs ~80mA active)
 - ✅ **Wake on button press** - ESP32 wakes from deep sleep when button is pressed
-- ✅ **On-demand Wi-Fi** - Connects only when needed, disconnects before sleep
-- ✅ **Fast reconnect** - Caches Wi-Fi config for ~1-2s faster reconnection
+- ✅ **On-demand Wi-Fi** - Connects only when needed, disconnects immediately after API response
+- ✅ **Fast reconnect** - Caches Wi-Fi BSSID (strongest signal) for ~1-2s faster reconnection
+- ✅ **Configurable TX power** - Reduce Wi-Fi transmit power to save battery when router is nearby
 - ✅ **Multicolor LED feedback** - Different colors indicate status and errors
 - ✅ **SwitchBot API v1.1** with signed token + secret headers
+- ✅ **Safety watchdog** - 60s WDT resets device if any operation hangs
 - ✅ **Auto retry** - Retries API call once on failure
+- ✅ **Automated test suite** - 52 tests via Docker (Python 3.13 + pytest)
+- ✅ **CI/CD** - GitHub Actions runs tests on push/PR
 - ✅ **Complete setup guide** for VS Code + MicroPython
 
 ## 📋 Requirements
@@ -67,6 +71,9 @@ SWITCHBOT_DEVICE_ID = "YourDeviceID"
 
 # M5Stack ATOM button GPIO (preconfigured)
 BUTTON_GPIO = 39
+
+# Optional: reduce Wi-Fi TX power to save battery (dBm)
+# WIFI_TX_POWER = 8  # Uncomment if router is nearby
 ```
 
 ### 3. Upload to the Device (mpremote)
@@ -95,6 +102,19 @@ Then press the button on the M5Stack ATOM to control the lock.
 ├── main.py              # Main MicroPython script
 ├── config_template.py   # Configuration template
 ├── config.py            # Configuration (create locally, not in git)
+├── tests/               # Automated test suite (runs on CPython via Docker)
+│   ├── conftest.py      # Hardware stubs + fake config injection
+│   ├── test_epoch.py    # Epoch conversion & timestamp tests
+│   ├── test_hmac.py     # HMAC-SHA256 (manual + stdlib paths)
+│   ├── test_auth_headers.py  # API authentication headers
+│   ├── test_send_command.py  # HTTP retry logic & error handling
+│   ├── test_rtc_memory.py    # RTC memory serialization
+│   ├── test_led.py      # LED brightness scaling
+│   └── test_wifi.py     # Wi-Fi connection logic
+├── Dockerfile.test      # Test runner image (Python 3.13 + pytest)
+├── Makefile             # make test / make test-clean
+├── pyproject.toml       # pytest configuration
+├── .github/workflows/test.yml  # CI: tests on push/PR to main
 ├── SETUP.md             # Full setup guide
 ├── README.md            # This file
 ├── LICENSE              # License
@@ -111,11 +131,14 @@ Then press the button on the M5Stack ATOM to control the lock.
    - Connects to Wi-Fi (fast reconnect if cached)
    - Syncs time via NTP (skipped if RTC valid)
    - Sends lock/unlock command to SwitchBot API
-   - LED feedback based on result
-   - Disconnects Wi-Fi and returns to deep sleep
+   - Disconnects Wi-Fi immediately after response
+   - LED feedback based on result (Wi-Fi off, CPU at 80MHz)
+   - Returns to deep sleep
 3. **Power consumption**:
    - Deep sleep: ~10uA (can run months on battery)
-   - Active (Wi-Fi + API call): ~80-150mA for 2-5 seconds
+   - Active (Wi-Fi + API call): ~80-150mA for 2-4 seconds
+   - LED feedback: ~25mA for ~0.5s (Wi-Fi off, CPU at 80MHz)
+   - With `WIFI_TX_POWER = 8`: ~50-100mA during Wi-Fi (+58% battery life)
 
 ## 🎮 Button Controls
 
@@ -214,6 +237,29 @@ HTTP status: 200
 
 Entering deep sleep...
 ```
+
+## 🧪 Automated Tests
+
+Tests run on standard CPython inside Docker — no MicroPython or hardware needed. Hardware modules are replaced by stubs automatically.
+
+```bash
+make test          # Build Docker image + run all tests
+make test-clean    # Remove the test Docker image
+```
+
+Tests also run automatically via GitHub Actions on every push and PR to `main`.
+
+**What's tested** (52 test cases):
+
+| Area | Tests |
+|------|-------|
+| Epoch conversion | Offset constant, `unix_time_ms()` range and precision |
+| HMAC-SHA256 | Manual RFC 2104 vs stdlib, long keys, empty inputs |
+| Auth headers | Required keys, uppercase Base64 signature, timestamp format |
+| HTTP send_command | Retry logic, 401 no-retry, response cleanup, error codes |
+| RTC memory | Save/load roundtrip, invalid BSSID, channel bounds |
+| LED brightness | `_scale()` math, clamping at 255 |
+| Wi-Fi connect | Already-connected, timeout, fast reconnect, bssid fallback |
 
 ## 🛠️ Troubleshooting
 

@@ -39,7 +39,7 @@ esptool --port $PORT --baud 460800 write_flash 0x1000 M5STACK_ATOM-*.bin
 ### Core Components
 1. **StatusLED** - RGB NeoPixel on GPIO 27 with multicolor feedback
 2. **SwitchBotController** - API v1.1 authentication (HMAC-SHA256) and HTTP
-3. **RTC Memory** - Caches Wi-Fi BSSID/channel for fast reconnect (survives deep sleep)
+3. **RTC Memory** - Caches Wi-Fi BSSID for fast reconnect + channel for diagnostics (survives deep sleep)
 
 ### Data Flow
 ```
@@ -89,16 +89,20 @@ Deep Sleep (wake on GPIO 39 LOW)
 
 - **Deep sleep**: `esp32.wake_on_ext0()` on GPIO 39. Power: ~10uA sleep vs ~80-150mA active.
 - **Epoch conversion**: MicroPython uses year 2000 epoch, SwitchBot API requires Unix epoch (1970). `unix_time_ms()` adds `946684800` seconds offset.
-- **RTC memory layout**: Bytes 0-5 = BSSID, Byte 6 = channel, Byte 7 = valid flag (0xAA)
+- **RTC memory layout**: Bytes 0-5 = BSSID (used for reconnect), Byte 6 = channel (diagnostic only), Byte 7 = valid flag (0xAA)
 - **Memory management**: `gc.collect()` after HTTP requests
+- **Watchdog timer**: 60s WDT in `handle_button_wake()` with `feed()` at checkpoints (post-WiFi, post-NTP, post-API). Resets device if any single phase hangs.
 
-## Performance Optimizations
+## Performance & Power Optimizations
 
-| Optimization | Latency Saved | Implementation |
-|--------------|---------------|----------------|
+| Optimization | Savings | Implementation |
+|--------------|---------|----------------|
 | Skip NTP | ~500ms-1s | `is_time_valid()` checks RTC year >= 2024 |
-| Fast reconnect | ~1-2s | BSSID/channel cached in RTC memory |
-| CPU scaling | ~5% power | 80MHz idle, 160MHz for Wi-Fi/API |
+| Fast reconnect | ~1-2s | BSSID cached in RTC memory (strongest RSSI, skips full AP scan) |
+| CPU scaling | ~20% CPU power | 80MHz idle/LED, 160MHz only for Wi-Fi/API |
+| Early WiFi disconnect | ~100-120mA for ~800ms | WiFi off before LED feedback blinks |
+| Configurable TX power | ~30-50mA during WiFi | `WIFI_TX_POWER` in config.py (dBm) |
+| Shorter LED blinks | ~400ms wake time | Halved blink durations |
 | API retry | +reliability | Single retry, skip on 401 errors |
 
 **Result**: First press ~3-5s, subsequent presses ~1-2s
@@ -125,9 +129,30 @@ Required values:
 - `SWITCHBOT_DEVICE_ID`
 - `BUTTON_GPIO` (default: 39 for M5Stack ATOM)
 
+Optional:
+- `WIFI_TX_POWER` (dBm, default: max ~20.5dBm). Lower values save battery if router is nearby. Examples: 8 (very close), 13 (same room), 17 (one wall).
+
 ## Testing
 
-No automated tests. Validation is manual:
+### Automated Tests (Docker)
+```bash
+make test          # Build image + run 52 tests in Docker (Python 3.13)
+make test-clean    # Remove test Docker image
+```
+
+Tests run on CPython via hardware stubs injected in `tests/conftest.py`. No MicroPython or hardware required.
+
+| Test File | What It Covers |
+|-----------|----------------|
+| `test_epoch.py` | `unix_time_ms()`, `_IS_MP_EPOCH`, epoch offset constant |
+| `test_hmac.py` | `hmac_sha256_digest()` manual RFC 2104 vs stdlib |
+| `test_auth_headers.py` | `_build_auth_headers()` structure, HMAC signature |
+| `test_send_command.py` | HTTP retry, response.close(), 401 no-retry |
+| `test_rtc_memory.py` | `save/load_wifi_config()` byte serialization |
+| `test_led.py` | `StatusLED._scale()` brightness math |
+| `test_wifi.py` | `connect_wifi()` timeout, already-connected |
+
+### Manual Validation (on hardware)
 1. Monitor serial output at 115200 baud
 2. Press button, observe LED and serial response
 3. First press: Full Wi-Fi scan + NTP sync
