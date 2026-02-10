@@ -1,0 +1,8 @@
+[project]
+name = "m5stack-atom-switchbot-lock-pro"
+version = "1.0.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
