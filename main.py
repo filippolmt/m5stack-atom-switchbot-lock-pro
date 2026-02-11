@@ -3,9 +3,9 @@ M5Stack ATOM Lite - SwitchBot Lock Pro Controller (Deep Sleep Version)
 - Deep sleep for minimal power consumption (~10uA)
 - Wake on button press (GPIO 39)
 - Short press (<1s) = UNLOCK, Long press (>=1s) = LOCK
-- Wi-Fi connection only when needed (fast reconnect via RTC cache)
+- Wi-Fi with fast reconnect (cached BSSID) + optional static IP
 - SwitchBot API v1.1 authentication (token + secret + HMAC-SHA256)
-- Multicolor LED feedback for different states and errors
+- Multicolor LED feedback for status and errors
 - Returns to deep sleep after command execution
 """
 
@@ -19,8 +19,8 @@ import ubinascii
 import hashlib
 
 # RTC memory layout for fast reconnect:
-# Bytes 0-5: BSSID (6 bytes) — used by wlan.connect() to skip full scan
-# Byte 6: Wi-Fi channel (1 byte) — diagnostic only (logged, not passed to driver)
+# Bytes 0-5: BSSID (6 bytes)
+# Byte 6: Wi-Fi channel (1 byte)
 # Byte 7: Valid flag (0xAA = valid)
 _RTC_VALID_FLAG = 0xAA
 
@@ -32,42 +32,20 @@ try:
 except ImportError:
     HAVE_HMAC = False
 
-# Random bytes for nonce (compatible with different MicroPython builds)
-try:
-    import urandom as _urandom_mod
-
-    def random_bytes(n):
-        # Use urandom() if it exists.
-        if hasattr(_urandom_mod, "urandom"):
-            return _urandom_mod.urandom(n)
-        # Otherwise use getrandbits() to generate n bytes.
-        if hasattr(_urandom_mod, "getrandbits"):
-            return bytes([_urandom_mod.getrandbits(8) for _ in range(n)])
-        # LCG fallback based on time.ticks_ms()
-        import time as _time_mod
-
-        b = bytearray(n)
-        seed = _time_mod.ticks_ms() & 0xFFFFFFFF
-        for i in range(n):
-            seed = (1103515245 * seed + 12345) & 0xFFFFFFFF
-            b[i] = seed & 0xFF
-        return bytes(b)
-
-except ImportError:
-    # If urandom is missing, try os.urandom when available
-    import os as _os_mod
-    import time as _time_mod
-
-    def random_bytes(n):
-        if hasattr(_os_mod, "urandom"):
-            return _os_mod.urandom(n)
-        # Final fallback: LCG
-        b = bytearray(n)
-        seed = _time_mod.ticks_ms() & 0xFFFFFFFF
-        for i in range(n):
-            seed = (1103515245 * seed + 12345) & 0xFFFFFFFF
-            b[i] = seed & 0xFF
-        return bytes(b)
+def random_bytes(n):
+    """Generate n random bytes for nonce. Lazy import to reduce module-level allocations."""
+    try:
+        import os
+        return os.urandom(n)
+    except (ImportError, AttributeError, OSError):
+        pass  # os.urandom unavailable; fall through to LCG
+    # LCG fallback (deterministic but sufficient for nonce uniqueness)
+    b = bytearray(n)
+    seed = time.ticks_ms() & 0xFFFFFFFF
+    for i in range(n):
+        seed = (1103515245 * seed + 12345) & 0xFFFFFFFF
+        b[i] = seed & 0xFF
+    return bytes(b)
 
 
 try:
@@ -77,12 +55,6 @@ except ImportError:
 
 # MicroPython on ESP32 uses epoch 2000-01-01. SwitchBot needs Unix epoch (1970).
 _UNIX_EPOCH_OFFSET_SECONDS = 946684800  # seconds between 1970-01-01 and 2000-01-01
-
-# Cache epoch detection (invariant for a given MicroPython build)
-try:
-    _IS_MP_EPOCH = time.gmtime(0)[0] == 2000
-except Exception:
-    _IS_MP_EPOCH = True  # Assume MicroPython epoch as safe default
 
 try:
     from config import (
@@ -97,12 +69,6 @@ except ImportError:
     print("ERROR: File config.py not found!")
     print("Copy config_template.py to config.py and fill in your data.")
     raise
-
-# Optional: Wi-Fi TX power (dBm). None = use default (~20.5dBm).
-try:
-    from config import WIFI_TX_POWER
-except ImportError:
-    WIFI_TX_POWER = None
 
 
 def sync_time_via_ntp():
@@ -146,23 +112,16 @@ def is_time_valid(min_year=2024):
     try:
         return time.gmtime()[0] >= min_year
     except Exception:
-        return False
+        return False  # Assume time invalid if gmtime() fails
 
 
 # --------------------- RTC MEMORY FOR FAST RECONNECT --------------------- #
 
 
 def save_wifi_config(bssid, channel):
-    """
-    Save Wi-Fi BSSID and channel to RTC memory.
-
-    The BSSID is used by connect_wifi() to skip a full AP scan.
-    The channel is stored for diagnostic logging only.
-    RTC memory survives deep sleep.
-    """
+    """Save Wi-Fi BSSID and channel to RTC memory for fast reconnect."""
     try:
         if not isinstance(bssid, bytes) or len(bssid) != 6:
-            print("Invalid BSSID, not caching")
             return
         from machine import RTC
         data = bytearray(8)
@@ -177,10 +136,7 @@ def save_wifi_config(bssid, channel):
 def load_wifi_config():
     """
     Load Wi-Fi config from RTC memory.
-
     Returns (bssid, channel) or (None, None) if not available.
-    Channel is for diagnostic logging; only BSSID is used for reconnection.
-    Channel is None when the stored value is out of the valid 1-14 range.
     """
     try:
         from machine import RTC
@@ -190,8 +146,8 @@ def load_wifi_config():
             raw_channel = data[6]
             channel = raw_channel if 0 < raw_channel <= 14 else None
             return bssid, channel
-    except Exception as e:
-        print(f"Could not load Wi-Fi config: {e}")
+    except Exception:
+        pass  # RTC memory unavailable or corrupted; return defaults below
     return None, None
 
 
@@ -200,8 +156,8 @@ def clear_wifi_config():
     try:
         from machine import RTC
         RTC().memory(bytearray(8))
-    except Exception as exc:
-        print("Warning: could not clear RTC memory:", exc)
+    except Exception:
+        pass  # Best-effort clear; ignore if RTC unavailable
 
 
 def unix_time_ms():
@@ -210,8 +166,12 @@ def unix_time_ms():
     MicroPython on ESP32 reports seconds from 2000-01-01, so convert when needed.
     """
     seconds = time.time()
-    if _IS_MP_EPOCH:
-        seconds += _UNIX_EPOCH_OFFSET_SECONDS
+    # Detect MicroPython epoch (2000) and adjust to Unix epoch (1970)
+    try:
+        if time.gmtime(0)[0] == 2000:
+            seconds += _UNIX_EPOCH_OFFSET_SECONDS
+    except Exception:
+        seconds += _UNIX_EPOCH_OFFSET_SECONDS  # gmtime broken; assume MP epoch
     return int(seconds * 1000)
 
 
@@ -396,8 +356,7 @@ class SwitchBotController:
             headers = self._build_auth_headers()
 
             try:
-                cmd_upper = command.upper()
-                print(f"Sending {cmd_upper} command to SwitchBot Lock Pro...")
+                print(f"Sending {command.upper()} command...")
                 response = urequests.post(url, headers=headers, data=data)
 
                 if response is None:
@@ -414,18 +373,16 @@ class SwitchBotController:
                 finally:
                     try:
                         response.close()
-                    except Exception as exc:
-                        print("Warning: response.close() failed:", exc)
+                    except Exception:
+                        pass  # Socket may already be closed
 
                 gc.collect()
-
                 print("HTTP status:", status)
-                print("Response body:", text)
+                print("Response:", text)
 
                 if status == 200:
                     return "success"
 
-                # Don't retry on auth errors (401) - won't help
                 if status == 401:
                     print("✗ Authentication failed (401). Check token/secret.")
                     return "auth_error"
@@ -442,17 +399,19 @@ class SwitchBotController:
 # --------------------- WIFI SETUP --------------------- #
 
 
-def connect_wifi(ssid, password, timeout=10):
+def connect_wifi(ssid, password, timeout=10, cached_bssid=None, cached_channel=None):
     """
     Connect the device to the Wi-Fi network with fast reconnect support.
 
-    Uses cached BSSID from RTC memory to skip full AP scan on reconnection
-    after deep sleep (~1-2s faster). Channel is logged for diagnostics only.
+    Uses cached BSSID from RTC memory for faster reconnection
+    after deep sleep (~1-2s faster).
 
     Args:
         ssid: Wi-Fi network name
         password: Wi-Fi password
         timeout: Connection timeout in seconds
+        cached_bssid: Pre-loaded BSSID bytes (avoids double RTC read)
+        cached_channel: Pre-loaded channel number
 
     Returns:
         True if connection succeeds, False otherwise
@@ -460,26 +419,29 @@ def connect_wifi(ssid, password, timeout=10):
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
 
-    # Reduce TX power to save current if configured
-    if WIFI_TX_POWER is not None:
-        try:
-            wlan.config(txpower=WIFI_TX_POWER)
-        except Exception as exc:
-            print("Warning: could not set TX power:", exc)
-
     if wlan.isconnected():
         print("Already connected to Wi-Fi")
         print(f"IP: {wlan.ifconfig()[0]}")
         return True
 
-    # Try fast reconnect using cached BSSID (channel is logged only)
-    cached_bssid, cached_channel = load_wifi_config()
+    # Use static IP if configured (skips DHCP, saves ~500ms-1s)
+    try:
+        from config import WIFI_STATIC_IP
+        wlan.ifconfig(WIFI_STATIC_IP)
+        print(f"Static IP: {WIFI_STATIC_IP[0]}")
+    except (ImportError, AttributeError):
+        pass  # WIFI_STATIC_IP not configured; use DHCP
+    except (ValueError, OSError) as e:
+        print(f"  Static IP rejected, using DHCP: {e}")  # Malformed tuple or driver error
+
+    # Try fast reconnect using cached BSSID (use pre-loaded or read from RTC)
+    if cached_bssid is None:
+        cached_bssid, cached_channel = load_wifi_config()
     if cached_bssid:
         print(f"Fast reconnect (ch={cached_channel})...", end="")
         try:
             wlan.connect(ssid, password, bssid=cached_bssid)
         except TypeError:
-            # Fallback if bssid parameter not supported on this build
             wlan.connect(ssid, password)
 
         # Short timeout for fast reconnect
@@ -490,7 +452,7 @@ def connect_wifi(ssid, password, timeout=10):
                 wlan.disconnect()
                 clear_wifi_config()  # Clear invalid cache
                 break
-            time.sleep_ms(100)
+            time.sleep_ms(50)
 
         if wlan.isconnected():
             print(" OK!")
@@ -510,42 +472,40 @@ def connect_wifi(ssid, password, timeout=10):
             try:
                 wlan.disconnect()
                 wlan.active(False)
-            except Exception as exc:
-                print("Warning: could not deactivate Wi-Fi:", exc)
+            except Exception:
+                pass  # Best-effort WiFi cleanup on timeout; ignore errors
             return False
-        time.sleep_ms(200)
+        time.sleep_ms(50)
         print(".", end="")
 
     print("\n✓ Connected to Wi-Fi!")
     print(f"  IP: {wlan.ifconfig()[0]}")
 
-    # Save BSSID and channel for next fast reconnect.
-    # Pick the AP with the strongest RSSI among matching SSIDs, since
-    # MicroPython doesn't expose the connected AP's BSSID and the ESP32
-    # driver also connects to the strongest signal by default.
+    # Cache connected AP's BSSID for fast reconnect.
+    # Try wlan.config('bssid') first (instant), fall back to scan (~1-2s).
     try:
-        scan_results = wlan.scan()
-        best_ap = None
-        best_rssi = -9999
-        for ap in scan_results:
-            try:
-                ap_ssid = ap[0].decode()
-            except Exception:
-                continue
-            if ap_ssid == ssid:
-                rssi = ap[3]
-                if rssi > best_rssi:
-                    best_rssi = rssi
-                    best_ap = ap
-        if best_ap:
-            bssid = bytes(best_ap[1])
-            channel = best_ap[2]
+        bssid = wlan.config('bssid')
+        if isinstance(bssid, bytes) and len(bssid) == 6 and bssid != b'\x00\x00\x00\x00\x00\x00':
+            channel = wlan.config('channel') if hasattr(wlan, 'config') else 0
             save_wifi_config(bssid, channel)
-            print(f"  Cached BSSID (rssi={best_rssi}) ch={channel} for fast reconnect")
+            print(f"  Cached ch={channel} for fast reconnect")
         else:
-            print("  SSID not found in scan results, BSSID not cached")
-    except Exception as e:
-        print(f"  Could not cache Wi-Fi config: {e}")
+            raise ValueError("no bssid from config")
+    except Exception:
+        # Fallback: scan for best-RSSI AP.
+        # NOTE: scan forces WiFi driver buffer reallocation, which may help
+        # defragment system heap for mbedTLS RSA operations.
+        try:
+            best_ap = None
+            for ap in wlan.scan():
+                if ap[0].decode() == ssid:
+                    if not best_ap or ap[3] > best_ap[3]:
+                        best_ap = ap
+            if best_ap:
+                save_wifi_config(bytes(best_ap[1]), best_ap[2])
+                print(f"  Cached ch={best_ap[2]} for fast reconnect (scan)")
+        except Exception as e:
+            print(f"  Could not cache Wi-Fi config: {e}")
 
     return True
 
@@ -579,8 +539,8 @@ def set_cpu_freq(mhz):
     """Set CPU frequency in MHz. Valid: 80, 160, 240."""
     try:
         freq(mhz * 1_000_000)
-    except Exception as e:
-        print(f"CPU freq error: {e}")
+    except Exception:
+        pass  # Frequency change unsupported or invalid; continue at current speed
 
 
 # Duration threshold for long press (milliseconds)
@@ -603,16 +563,17 @@ def measure_button_press(button_gpio, led, timeout_ms=5000):
     # GPIO 39 is input-only, has external pull-up on ATOM Lite
     button = Pin(button_gpio, Pin.IN)
     start = time.ticks_ms()
+    led.green()  # Start with green (short press = unlock)
+    is_long = False
 
     # Wait for button release, showing feedback
     while button.value() == 0:  # Button pressed = LOW
         elapsed = time.ticks_diff(time.ticks_ms(), start)
 
-        # Visual feedback: green for short, purple for long
-        if elapsed < LONG_PRESS_MS:
-            led.green()  # Short press = unlock
-        else:
+        # Switch LED to purple once on long press transition
+        if not is_long and elapsed >= LONG_PRESS_MS:
             led.purple()  # Long press = lock
+            is_long = True
 
         if elapsed > timeout_ms:
             break
@@ -648,14 +609,6 @@ def handle_button_wake(led):
     Returns:
         str: Result code from send_command or "wifi_error"
     """
-    # Safety watchdog: reset device if operation hangs (e.g., HTTP stuck)
-    wdt = None
-    try:
-        from machine import WDT
-        wdt = WDT(timeout=60000)  # 60s - resets device if operation hangs
-    except Exception as exc:
-        print("Warning: WDT not enabled:", exc)
-
     print("\n" + "=" * 50)
     print("WAKE FROM DEEP SLEEP - Button pressed!")
     print("=" * 50)
@@ -679,16 +632,15 @@ def handle_button_wake(led):
     else:
         led.blue()  # Blue = normal Wi-Fi scan
 
-    # Connect to Wi-Fi (uses fast reconnect if available)
-    if not connect_wifi(WIFI_SSID, WIFI_PASSWORD, timeout=10):
+    # Connect to Wi-Fi (pass cached values to avoid double RTC read)
+    if not connect_wifi(WIFI_SSID, WIFI_PASSWORD, timeout=10,
+                        cached_bssid=cached_bssid,
+                        cached_channel=cached_channel):
         print("✗ Cannot connect to Wi-Fi")
         led.off()
-        led.blink_orange(times=3, on_ms=150, off_ms=100)
+        led.blink_orange(times=3, on_ms=300, off_ms=200)
         set_cpu_freq(80)
         return "wifi_error"
-
-    if wdt:
-        wdt.feed()
 
     # Wi-Fi connected - show action color
     if is_lock:
@@ -712,61 +664,49 @@ def handle_button_wake(led):
         if not ntp_ok:
             print("⚠ NTP sync failed, attempting anyway...")
             led.off()
-            led.blink_yellow(times=2, on_ms=150, off_ms=100)
+            led.blink_yellow(times=2, on_ms=300, off_ms=200)
             if is_lock:
                 led.purple()
             else:
                 led.green()
-
-    if wdt:
-        wdt.feed()
 
     # Initialize controller and send command (with 1 retry)
     controller = SwitchBotController(
         SWITCHBOT_TOKEN, SWITCHBOT_SECRET, SWITCHBOT_DEVICE_ID
     )
 
-    print(f"\nSending {command.upper()} command...")
     result = controller.send_command(command=command, retries=1)
 
-    if wdt:
-        wdt.feed()
+    # Disconnect Wi-Fi early to save power during LED feedback (~100-120mA)
+    try:
+        wlan = network.WLAN(network.STA_IF)
+        wlan.disconnect()
+        wlan.active(False)
+    except Exception:
+        pass  # Best-effort WiFi shutdown; device enters deep sleep next
 
-    # Disconnect Wi-Fi immediately after API response to save power
-    wlan = network.WLAN(network.STA_IF)
-    wlan.disconnect()
-    wlan.active(False)
-
-    # Drop CPU before LED feedback (blinks don't need 160MHz)
-    set_cpu_freq(80)
-
-    # LED feedback based on result (WiFi off, CPU at 80MHz)
+    # LED feedback based on result (Wi-Fi already off, saving power)
     led.off()
     if result == "success":
         if is_lock:
             print("✓ Door locked successfully!")
-            led.blink_purple(times=2, on_ms=150, off_ms=75)
+            led.blink_purple(times=2, on_ms=300, off_ms=100)
         else:
             print("✓ Door unlocked successfully!")
-            led.blink_green(times=2, on_ms=150, off_ms=75)
+            led.blink_green(times=2, on_ms=300, off_ms=100)
     elif result == "auth_error":
         print("✗ Authentication error (401)")
-        led.blink_fast_red(times=6, on_ms=60, off_ms=60)
+        led.blink_fast_red(times=6, on_ms=100, off_ms=100)
     elif result == "time_error":
         print("✗ Time sync error")
-        led.blink_yellow(times=4, on_ms=100, off_ms=100)
+        led.blink_yellow(times=4, on_ms=200, off_ms=200)
     else:  # api_error or other
         print("✗ API error")
-        led.blink_red(times=3, on_ms=100, off_ms=100)
+        led.blink_red(times=3, on_ms=200, off_ms=200)
 
     led.off()
 
-    gc.collect()
-
-    # Final WDT feed before returning to main() -> deepsleep()
-    if wdt:
-        wdt.feed()
-
+    # Deep sleep resets CPU and RAM, no need for set_cpu_freq(80) or gc.collect()
     return result
 
 

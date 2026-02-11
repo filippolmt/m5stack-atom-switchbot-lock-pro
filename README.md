@@ -9,13 +9,12 @@ This project provides a complete solution to integrate your M5Stack ATOM (ESP32)
 - ✅ **Deep sleep mode** - Ultra-low power consumption (~10uA idle vs ~80mA active)
 - ✅ **Wake on button press** - ESP32 wakes from deep sleep when button is pressed
 - ✅ **On-demand Wi-Fi** - Connects only when needed, disconnects immediately after API response
-- ✅ **Fast reconnect** - Caches Wi-Fi BSSID (strongest signal) for ~1-2s faster reconnection
-- ✅ **Configurable TX power** - Reduce Wi-Fi transmit power to save battery when router is nearby
+- ✅ **Fast reconnect** - Caches Wi-Fi BSSID for ~1-2s faster reconnection after deep sleep
+- ✅ **Optional static IP** - Skip DHCP negotiation for ~500ms-1s faster connection
 - ✅ **Multicolor LED feedback** - Different colors indicate status and errors
 - ✅ **SwitchBot API v1.1** with signed token + secret headers
-- ✅ **Safety watchdog** - 60s WDT resets device if any operation hangs
 - ✅ **Auto retry** - Retries API call once on failure
-- ✅ **Automated test suite** - 52 tests via Docker (Python 3.13 + pytest)
+- ✅ **Automated test suite** - 53 tests via Docker (Python 3.13 + pytest)
 - ✅ **CI/CD** - GitHub Actions runs tests on push/PR
 - ✅ **Complete setup guide** for VS Code + MicroPython
 
@@ -72,8 +71,8 @@ SWITCHBOT_DEVICE_ID = "YourDeviceID"
 # M5Stack ATOM button GPIO (preconfigured)
 BUTTON_GPIO = 39
 
-# Optional: reduce Wi-Fi TX power to save battery (dBm)
-# WIFI_TX_POWER = 8  # Uncomment if router is nearby
+# Optional: static IP to skip DHCP (saves ~500ms-1s per connection)
+# WIFI_STATIC_IP = ("192.168.1.100", "255.255.255.0", "192.168.1.1", "8.8.8.8")
 ```
 
 ### 3. Upload to the Device (mpremote)
@@ -132,13 +131,12 @@ Then press the button on the M5Stack ATOM to control the lock.
    - Syncs time via NTP (skipped if RTC valid)
    - Sends lock/unlock command to SwitchBot API
    - Disconnects Wi-Fi immediately after response
-   - LED feedback based on result (Wi-Fi off, CPU at 80MHz)
+   - LED feedback based on result (Wi-Fi already off)
    - Returns to deep sleep
 3. **Power consumption**:
    - Deep sleep: ~10uA (can run months on battery)
    - Active (Wi-Fi + API call): ~80-150mA for 2-4 seconds
-   - LED feedback: ~25mA for ~0.5s (Wi-Fi off, CPU at 80MHz)
-   - With `WIFI_TX_POWER = 8`: ~50-100mA during Wi-Fi (+58% battery life)
+   - LED feedback: ~25mA for ~0.5s (Wi-Fi already off)
 
 ## 🎮 Button Controls
 
@@ -204,35 +202,43 @@ Entering deep sleep...
 ==================================================
 ```
 
-**Short press - UNLOCK:**
+**Short press - UNLOCK (fast reconnect):**
 ```
 ==================================================
 WAKE FROM DEEP SLEEP - Button pressed!
 ==================================================
 Button held for 450ms
 Action: UNLOCK
-Fast reconnect (ch=6)... OK!
+Fast reconnect available (ch=1)
+Fast reconnect (ch=1)... OK!
+  IP: 192.168.178.87
 ✓ RTC time valid, skipping NTP sync
-
 Sending UNLOCK command...
 HTTP status: 200
+Response: {"statusCode":100,"body":{},"message":"success"}
 ✓ Door unlocked successfully!
 
 Entering deep sleep...
 ```
 
-**Long press - LOCK:**
+**Long press - LOCK (first boot, normal scan):**
 ```
 ==================================================
 WAKE FROM DEEP SLEEP - Button pressed!
 ==================================================
-Button held for 1523ms
+Button held for 1552ms
 Action: LOCK
-Fast reconnect (ch=6)... OK!
-✓ RTC time valid, skipping NTP sync
-
+Connecting to Wi-Fi: MySSID...
+..........................
+✓ Connected to Wi-Fi!
+  IP: 192.168.178.87
+  Cached ch=1 for fast reconnect
+RTC time invalid, syncing NTP...
+Synchronizing time via NTP...
+✓ Time synchronized via NTP (UTC).
 Sending LOCK command...
 HTTP status: 200
+Response: {"statusCode":100,"body":{},"message":"success"}
 ✓ Door locked successfully!
 
 Entering deep sleep...
@@ -249,14 +255,14 @@ make test-clean    # Remove the test Docker image
 
 Tests also run automatically via GitHub Actions on every push and PR to `main`.
 
-**What's tested** (52 test cases):
+**What's tested** (53 test cases):
 
 | Area | Tests |
 |------|-------|
 | Epoch conversion | Offset constant, `unix_time_ms()` range and precision |
 | HMAC-SHA256 | Manual RFC 2104 vs stdlib, long keys, empty inputs |
 | Auth headers | Required keys, uppercase Base64 signature, timestamp format |
-| HTTP send_command | Retry logic, 401 no-retry, response cleanup, error codes |
+| HTTP send_command | Retry logic, 401 no-retry, response cleanup, attribute-raise resilience |
 | RTC memory | Save/load roundtrip, invalid BSSID, channel bounds |
 | LED brightness | `_scale()` math, clamping at 255 |
 | Wi-Fi connect | Already-connected, timeout, fast reconnect, bssid fallback |
