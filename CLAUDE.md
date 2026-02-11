@@ -56,9 +56,8 @@ Check reset_cause()
 │   3. Wi-Fi connect (fast if cached) │
 │   4. NTP sync (skip if RTC valid)   │
 │   5. API lock/unlock (retry once)   │
-│   6. LED feedback (color by result) │
-│   7. Wi-Fi disconnect               │
-│   8. CPU → 80MHz                    │
+│   6. Wi-Fi disconnect               │
+│   7. LED feedback (color by result) │
 └─────────────────────────────────────┘
     ↓
 Deep Sleep (wake on GPIO 39 LOW)
@@ -88,10 +87,33 @@ Deep Sleep (wake on GPIO 39 LOW)
 ## Critical Implementation Details
 
 - **Deep sleep**: `esp32.wake_on_ext0()` on GPIO 39. Power: ~10uA sleep vs ~80-150mA active.
-- **Epoch conversion**: MicroPython uses year 2000 epoch, SwitchBot API requires Unix epoch (1970). `unix_time_ms()` adds `946684800` seconds offset.
+- **Epoch conversion**: MicroPython uses year 2000 epoch, SwitchBot API requires Unix epoch (1970). `unix_time_ms()` detects epoch at call time via `time.gmtime(0)[0]` and adds `946684800` seconds offset when needed.
 - **RTC memory layout**: Bytes 0-5 = BSSID (used for reconnect), Byte 6 = channel (diagnostic only), Byte 7 = valid flag (0xAA)
-- **Memory management**: `gc.collect()` after HTTP requests
-- **Watchdog timer**: 60s WDT in `handle_button_wake()` with `feed()` at checkpoints (post-WiFi, post-NTP, post-API). Resets device if any single phase hangs.
+- **Memory management**: `gc.collect()` after HTTP requests only. See **ESP32 System Heap / mbedTLS Constraint** below.
+
+## ESP32 System Heap / mbedTLS Constraint (CRITICAL)
+
+The ESP32-PICO-D4 (no PSRAM) has two separate heaps: the **Python GC heap** (`gc.mem_free()`) and the **system heap** (used by the WiFi driver and mbedTLS for TLS/RSA operations). `gc.mem_free()` only reports the Python heap — the system heap is invisible to Python code.
+
+**mbedTLS requires large contiguous blocks on the system heap** for RSA public key operations during the TLS handshake. If the system heap is fragmented, TLS fails with `MBEDTLS_ERR_MPI_ALLOC_FAILED` (-17040) or `MBEDTLS_ERR_RSA_PUBLIC_FAILED` / `MBEDTLS_ERR_PK_INVALID_PUBKEY`, even when Python heap shows 127KB+ free.
+
+### DO NOT do any of the following before `urequests.post()`:
+
+| Forbidden Pattern | Why It Breaks TLS |
+|---|---|
+| `gc.collect()` before POST | Frees Python objects whose finalizers release system heap memory mid-allocation, creating fragmentation gaps |
+| Module-level caching (e.g. `_IS_MP_EPOCH = time.gmtime(0)[0] == 2000`) | Changes system heap layout at boot, shifting where mbedTLS allocates |
+| `wlan.config(pm=0)` (WiFi PS_NONE) | Increases WiFi driver system heap usage, competing with mbedTLS |
+| `WDT(timeout=...)` | Allocates hardware timer resources from system heap, confirmed to cause MBEDTLS_ERR_MPI_ALLOC_FAILED |
+| `usocket.setdefaulttimeout()` | May interfere with TLS socket internals |
+| Extra `import` statements (e.g. `import urandom`) | Each import adds bytecode + module objects, shifting system heap layout at boot. Confirmed: adding `urandom` fallbacks to `random_bytes()` triggered MBEDTLS_ERR_MPI_ALLOC_FAILED |
+
+### Safe patterns:
+- `gc.collect()` **after** HTTP requests (cleanup only)
+- BSSID caching via `wlan.config('bssid')` with `wlan.scan()` fallback (scan may help consolidate system heap)
+- Inline epoch detection inside `unix_time_ms()` (no module-level allocation)
+- Lazy imports inside functions (e.g. `random_bytes()`, static IP) instead of module-level
+- Minimal module-level globals — every global allocation shifts the system heap layout
 
 ## Performance & Power Optimizations
 
@@ -99,9 +121,9 @@ Deep Sleep (wake on GPIO 39 LOW)
 |--------------|---------|----------------|
 | Skip NTP | ~500ms-1s | `is_time_valid()` checks RTC year >= 2024 |
 | Fast reconnect | ~1-2s | BSSID cached in RTC memory (strongest RSSI, skips full AP scan) |
+| Static IP | ~500ms-1s | Optional `WIFI_STATIC_IP` in config.py (skips DHCP) |
 | CPU scaling | ~20% CPU power | 80MHz idle/LED, 160MHz only for Wi-Fi/API |
 | Early WiFi disconnect | ~100-120mA for ~800ms | WiFi off before LED feedback blinks |
-| Configurable TX power | ~30-50mA during WiFi | `WIFI_TX_POWER` in config.py (dBm) |
 | Shorter LED blinks | ~400ms wake time | Halved blink durations |
 | API retry | +reliability | Single retry, skip on 401 errors |
 
@@ -130,13 +152,15 @@ Required values:
 - `BUTTON_GPIO` (default: 39 for M5Stack ATOM)
 
 Optional:
-- `WIFI_TX_POWER` (dBm, default: max ~20.5dBm). Lower values save battery if router is nearby. Examples: 8 (very close), 13 (same room), 17 (one wall).
+- `WIFI_STATIC_IP` (tuple: IP, subnet, gateway, DNS). Skips DHCP negotiation, saves ~500ms-1s per connection. Example: `("192.168.1.100", "255.255.255.0", "192.168.1.1", "8.8.8.8")`
+
+**Note**: `WIFI_TX_POWER` was removed due to ESP32 system heap constraints (see ESP32 mbedTLS section).
 
 ## Testing
 
 ### Automated Tests (Docker)
 ```bash
-make test          # Build image + run 52 tests in Docker (Python 3.13)
+make test          # Build image + run 53 tests in Docker (Python 3.13)
 make test-clean    # Remove test Docker image
 ```
 
@@ -144,10 +168,10 @@ Tests run on CPython via hardware stubs injected in `tests/conftest.py`. No Micr
 
 | Test File | What It Covers |
 |-----------|----------------|
-| `test_epoch.py` | `unix_time_ms()`, `_IS_MP_EPOCH`, epoch offset constant |
+| `test_epoch.py` | `unix_time_ms()`, epoch offset constant, inline epoch detection, gmtime-broken fallback |
 | `test_hmac.py` | `hmac_sha256_digest()` manual RFC 2104 vs stdlib |
 | `test_auth_headers.py` | `_build_auth_headers()` structure, HMAC signature |
-| `test_send_command.py` | HTTP retry, response.close(), 401 no-retry |
+| `test_send_command.py` | HTTP retry, response.close(), 401 no-retry, attribute-raise cleanup |
 | `test_rtc_memory.py` | `save/load_wifi_config()` byte serialization |
 | `test_led.py` | `StatusLED._scale()` brightness math |
 | `test_wifi.py` | `connect_wifi()` timeout, already-connected |

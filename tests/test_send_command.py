@@ -54,7 +54,6 @@ def test_auth_error_on_401():
          patch.object(main.urequests, "post", post_mock):
         result = ctrl.send_command("lock", retries=1)
     assert result == "auth_error"
-    # Must NOT retry on 401
     assert post_mock.call_count == 1
 
 
@@ -66,7 +65,7 @@ def test_api_error_after_retries_on_500():
          patch.object(main.urequests, "post", post_mock):
         result = ctrl.send_command("unlock", retries=1)
     assert result == "api_error"
-    assert post_mock.call_count == 2  # initial + 1 retry
+    assert post_mock.call_count == 2
 
 
 def test_time_error_without_sync():
@@ -125,23 +124,12 @@ def test_response_closed_on_error():
 
 
 def test_response_closed_when_attribute_raises():
-    """response.close() via finally even if .status_code raises."""
+    """response.close() must be called even when status_code/text raise."""
     ctrl = _make_controller()
     broken_resp = MagicMock()
-    broken_resp.status_code = property(lambda self: (_ for _ in ()).throw(OSError))
-    # Use a real object so the finally block works
-    closed = []
-
-    class BrokenResponse:
-        @property
-        def status_code(self):
-            raise OSError("bad read")
-        text = ""
-        def close(self):
-            closed.append(True)
-
+    type(broken_resp).status_code = property(lambda self: (_ for _ in ()).throw(OSError("corrupt")))
     with patch("main.ensure_time_synced", return_value=True), \
-         patch.object(main.urequests, "post", return_value=BrokenResponse()):
+         patch.object(main.urequests, "post", return_value=broken_resp):
         result = ctrl.send_command("unlock", retries=0)
-    assert len(closed) == 1
     assert result == "api_error"
+    broken_resp.close.assert_called()
