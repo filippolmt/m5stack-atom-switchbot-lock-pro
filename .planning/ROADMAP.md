@@ -164,10 +164,10 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 
 ### Phase 09.1: Final Power Micro-Optimizations (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** Four zero-risk micro-optimizations: CPU 80MHz during LED feedback, serial flush 20ms, NeoPixel GPIO hold LOW, API retry 300ms
+**Requirements**: None (inserted optimization phase)
 **Depends on:** Phase 9
-**Plans:** 0 plans
+**Plans:** 1 plan
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 09.1 to break down)
+- [ ] 09.1-01-PLAN.md — Apply all four power micro-optimizations with tests
