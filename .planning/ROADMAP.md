@@ -47,10 +47,10 @@ Plans:
   2. Voltage value (in millivolts) is printed to serial output on every wake cycle
   3. ADC read uses lazy import of machine.ADC inside the function, not at module level
   4. 20+ consecutive wake cycles complete without mbedTLS errors (TLS handshake still works)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — TDD: read_battery_voltage() with FakeADC stub, tests, and wake flow integration
 
 ### Phase 3: Low Battery Warning
 **Goal**: User receives visible warning when battery is running low, before the device dies
@@ -153,7 +153,7 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. RTC Memory Layout Extension | 0/1 | Planning complete | - |
-| 2. Battery Voltage Reading | 0/0 | Not started | - |
+| 2. Battery Voltage Reading | 0/1 | Planning complete | - |
 | 3. Low Battery Warning | 0/0 | Not started | - |
 | 4. Wake Cycle Counter | 0/0 | Not started | - |
 | 5. LED Power Reduction | 0/0 | Not started | - |
