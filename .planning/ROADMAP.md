@@ -60,10 +60,10 @@ Plans:
   1. Orange LED blinks when battery voltage is below configurable threshold (default ~3.3V)
   2. Low-battery warning appears after the normal lock/unlock feedback, not replacing it
   3. Warning is visible on every wake cycle while battery is below threshold
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — TDD: BATTERY_LOW_MV constant, check_low_battery() function, and orange LED warning
 
 ### Phase 4: Wake Cycle Counter
 **Goal**: User can track how many times the device has been used since last power cycle for diagnostics
@@ -154,7 +154,7 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 |-------|----------------|--------|-----------|
 | 1. RTC Memory Layout Extension | 0/1 | Planning complete | - |
 | 2. Battery Voltage Reading | 0/1 | Planning complete | - |
-| 3. Low Battery Warning | 0/0 | Not started | - |
+| 3. Low Battery Warning | 0/1 | Planning complete | - |
 | 4. Wake Cycle Counter | 0/0 | Not started | - |
 | 5. LED Power Reduction | 0/0 | Not started | - |
 | 6. WiFi Channel Fast Reconnect | 0/0 | Not started | - |
