@@ -99,6 +99,8 @@ sys.modules["machine"] = machine
 esp32 = types.ModuleType("esp32")
 esp32.WAKEUP_ALL_LOW = 0
 esp32.wake_on_ext0 = lambda pin=None, level=None: None
+esp32.gpio_hold_en = lambda pin: None
+esp32.gpio_deep_sleep_hold_en = lambda: None
 sys.modules["esp32"] = esp32
 
 # ---------------------------------------------------------------------------
