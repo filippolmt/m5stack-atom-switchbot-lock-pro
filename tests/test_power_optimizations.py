@@ -145,17 +145,15 @@ def test_cpu_freq_reset_after_wifi():
     """handle_button_wake should call set_cpu_freq(80) after WiFi disconnect."""
     freq_calls = []
 
+    original_freq = main.freq
+
     def track_freq(f=None):
         if f is not None:
             freq_calls.append(f)
         return 160_000_000
 
-    import sys
-    machine_mod = sys.modules["machine"]
-    original_freq = machine_mod.freq
-
-    # Track all freq() calls
-    machine_mod.freq = track_freq
+    # Patch main.freq directly (it's imported via 'from machine import freq')
+    main.freq = track_freq
 
     # Set up FakeWLAN that auto-connects
     import network
@@ -222,5 +220,5 @@ def test_cpu_freq_reset_after_wifi():
         assert idx_80 > idx_160, \
             f"80MHz (idx={idx_80}) should come after 160MHz (idx={idx_160})"
     finally:
-        machine_mod.freq = original_freq
+        main.freq = original_freq
         network.WLAN = original_wlan

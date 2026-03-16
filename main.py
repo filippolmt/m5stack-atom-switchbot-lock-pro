@@ -471,7 +471,7 @@ class SwitchBotController:
         for attempt in range(retries + 1):
             if attempt > 0:
                 log(f"Retry {attempt}/{retries}...")
-                time.sleep_ms(500)  # Brief delay before retry
+                time.sleep_ms(300)  # Brief delay before retry (300ms sufficient for transient recovery)
 
             # Regenerate headers for each attempt (fresh timestamp/nonce)
             headers = self._build_auth_headers()
@@ -657,8 +657,16 @@ def enter_deep_sleep(button_gpio):
     wake_pin = Pin(button_gpio, Pin.IN)
     esp32.wake_on_ext0(pin=wake_pin, level=esp32.WAKEUP_ALL_LOW)
 
-    # Small delay to allow serial output to flush
-    time.sleep_ms(100)
+    # Hold NeoPixel GPIO 27 LOW during deep sleep to cut WS2812 quiescent current
+    try:
+        hold_pin = Pin(27, Pin.OUT)
+        hold_pin.value(0)
+        esp32.gpio_hold_en(27)
+    except Exception:
+        pass  # gpio_hold_en not available in all MicroPython builds
+
+    # 20ms sufficient for 115200 baud UART flush
+    time.sleep_ms(20)
 
     # Enter deep sleep indefinitely (wake only on button)
     deepsleep()
@@ -824,6 +832,9 @@ def handle_button_wake(led):
     except Exception:
         pass  # Best-effort WiFi shutdown; device enters deep sleep next
 
+    # Drop CPU to 80MHz for LED feedback (saves ~15mA for ~800ms of blinks)
+    set_cpu_freq(80)
+
     # Read battery voltage (safe: WiFi is off, TLS is done)
     battery_mv = read_battery_voltage()
     if battery_mv > 0:
@@ -856,7 +867,7 @@ def handle_button_wake(led):
 
     led.off()
 
-    # Deep sleep resets CPU and RAM, no need for set_cpu_freq(80) or gc.collect()
+    # Deep sleep resets CPU and RAM, no need for gc.collect()
     return result
 
 

@@ -38,7 +38,9 @@ class FakePin:
         self.pin_num = pin_num
         self._value = 1  # HIGH = not pressed
 
-    def value(self):
+    def value(self, v=None):
+        if v is not None:
+            self._value = v
         return self._value
 
 
