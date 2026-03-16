@@ -109,13 +109,13 @@ Plans:
 **Depends on**: Phase 3, Phase 5
 **Requirements**: PWR-01
 **Success Criteria** (what must be TRUE):
-  1. config.py supports optional constants: LED_BRIGHTNESS, BATTERY_LOW_THRESHOLD, BATTERY_CRITICAL_THRESHOLD
+  1. config.py supports optional constants: LED_BRIGHTNESS, BATTERY_LOW_MV
   2. main.py reads these with try/except fallback to sensible defaults (same pattern as WIFI_STATIC_IP)
   3. Changing LED_BRIGHTNESS in config.py visibly changes LED behavior on next wake
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 07-01: TBD
+- [ ] 07-01-PLAN.md — Make LED_BRIGHTNESS and BATTERY_LOW_MV configurable via config.py with try/except fallback
 
 ### Phase 8: Logging Control
 **Goal**: Serial output can be reduced or silenced for production use to save power
@@ -158,6 +158,6 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 | 4. Wake Cycle Counter | 0/1 | Planning complete | - |
 | 5. LED Power Reduction | 0/1 | Planning complete | - |
 | 6. WiFi Channel Fast Reconnect | 0/1 | Planning complete | - |
-| 7. Power Configuration Constants | 0/0 | Not started | - |
+| 7. Power Configuration Constants | 0/1 | Planning complete | - |
 | 8. Logging Control | 0/1 | Planning complete | - |
 | 9. Documentation Update | 0/0 | Not started | - |
