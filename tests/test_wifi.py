@@ -56,7 +56,7 @@ def test_successful_connection():
 
 
 def test_fast_reconnect_succeeds():
-    """Cached BSSID/channel -> fast reconnect path, bssid passed to connect()."""
+    """Cached BSSID/channel -> fast reconnect path, bssid+channel passed to connect()."""
     cached_bssid = b"\xAA\xBB\xCC\xDD\xEE\xFF"
     cached_channel = 6
     call_count = 0
@@ -77,8 +77,98 @@ def test_fast_reconnect_succeeds():
         result = main.connect_wifi("SSID", "PASS")
 
     assert result is True
-    # bssid must be passed to connect() for fast reconnect
+    # bssid AND channel must be passed to connect() for fast reconnect
+    fake_wlan.connect.assert_called_once_with("SSID", "PASS", bssid=cached_bssid, channel=cached_channel)
+
+
+def test_fast_reconnect_passes_channel():
+    """Fast reconnect passes channel=6 alongside bssid to wlan.connect()."""
+    cached_bssid = b"\xAA\xBB\xCC\xDD\xEE\xFF"
+    cached_channel = 6
+    call_count = 0
+
+    def isconnected_side_effect():
+        nonlocal call_count
+        call_count += 1
+        return call_count > 2
+
+    fake_wlan = MagicMock()
+    fake_wlan.isconnected.side_effect = isconnected_side_effect
+    fake_wlan.ifconfig.return_value = ("192.168.1.100", "", "", "")
+
+    with patch("main.network.WLAN", return_value=fake_wlan), \
+         patch("main.load_wifi_config", return_value=(cached_bssid, cached_channel)), \
+         patch("time.ticks_diff", return_value=0):
+        result = main.connect_wifi("SSID", "PASS")
+
+    assert result is True
+    fake_wlan.connect.assert_called_once_with("SSID", "PASS", bssid=cached_bssid, channel=6)
+
+
+def test_fast_reconnect_channel_none_not_passed():
+    """When cached_channel is None, connect() is called without channel kwarg."""
+    cached_bssid = b"\xAA\xBB\xCC\xDD\xEE\xFF"
+    call_count = 0
+
+    def isconnected_side_effect():
+        nonlocal call_count
+        call_count += 1
+        return call_count > 2
+
+    fake_wlan = MagicMock()
+    fake_wlan.isconnected.side_effect = isconnected_side_effect
+    fake_wlan.ifconfig.return_value = ("192.168.1.100", "", "", "")
+
+    with patch("main.network.WLAN", return_value=fake_wlan), \
+         patch("main.load_wifi_config", return_value=(cached_bssid, None)), \
+         patch("time.ticks_diff", return_value=0):
+        result = main.connect_wifi("SSID", "PASS")
+
+    assert result is True
+    # channel should NOT be in the call kwargs
     fake_wlan.connect.assert_called_once_with("SSID", "PASS", bssid=cached_bssid)
+
+
+def test_fast_reconnect_channel_typeerror_fallback():
+    """If channel kwarg raises TypeError, fallback without channel, then without bssid."""
+    cached_bssid = b"\xAA\xBB\xCC\xDD\xEE\xFF"
+    call_count = 0
+
+    def isconnected_side_effect():
+        nonlocal call_count
+        call_count += 1
+        return call_count > 2
+
+    call_index = 0
+
+    def connect_side_effect(*args, **kwargs):
+        nonlocal call_index
+        call_index += 1
+        if call_index == 1:
+            # First call: with channel -> TypeError
+            raise TypeError("unexpected keyword argument 'channel'")
+        if call_index == 2:
+            # Second call: with bssid only -> TypeError
+            raise TypeError("unexpected keyword argument 'bssid'")
+        # Third call: plain connect -> succeeds
+
+    fake_wlan = MagicMock()
+    fake_wlan.isconnected.side_effect = isconnected_side_effect
+    fake_wlan.connect.side_effect = connect_side_effect
+    fake_wlan.ifconfig.return_value = ("192.168.1.100", "", "", "")
+
+    with patch("main.network.WLAN", return_value=fake_wlan), \
+         patch("main.load_wifi_config", return_value=(cached_bssid, 6)), \
+         patch("time.ticks_diff", return_value=0):
+        result = main.connect_wifi("SSID", "PASS")
+
+    assert result is True
+    assert fake_wlan.connect.call_count == 3
+    # Verify the 3-tier fallback progression
+    calls = fake_wlan.connect.call_args_list
+    assert calls[0] == (("SSID", "PASS"), {"bssid": cached_bssid, "channel": 6})
+    assert calls[1] == (("SSID", "PASS"), {"bssid": cached_bssid})
+    assert calls[2] == (("SSID", "PASS"),)
 
 
 def test_fast_reconnect_timeout_falls_back_to_normal():
@@ -122,7 +212,7 @@ def test_fast_reconnect_bssid_typeerror_fallback():
         call_count += 1
         return call_count > 2
 
-    def connect_side_effect(ssid=None, password=None, bssid=None):
+    def connect_side_effect(ssid=None, password=None, bssid=None, channel=None):
         if bssid is not None:
             raise TypeError("unexpected keyword argument 'bssid'")
 
@@ -137,6 +227,6 @@ def test_fast_reconnect_bssid_typeerror_fallback():
         result = main.connect_wifi("SSID", "PASS")
 
     assert result is True
-    # Second call should be without bssid (fallback)
-    assert fake_wlan.connect.call_count == 2
+    # 3-tier fallback: channel+bssid -> bssid -> plain
+    assert fake_wlan.connect.call_count == 3
     fake_wlan.connect.assert_any_call("SSID", "PASS")

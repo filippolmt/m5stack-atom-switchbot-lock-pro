@@ -29,8 +29,11 @@ import hashlib
 _RTC_VALID_FLAG = 0xAA
 _RTC_VALID_FLAG_V2 = 0xBB  # Extended 12-byte layout
 
-# Default LED brightness (0-255). Halved from 64 to reduce NeoPixel current draw.
-LED_BRIGHTNESS = 32
+# Default LED brightness (0-255). Configurable via config.py.
+try:
+    from config import LED_BRIGHTNESS
+except (ImportError, AttributeError):
+    LED_BRIGHTNESS = 32
 
 # Try to use hmac if available, otherwise fall back to the manual version
 try:
@@ -540,9 +543,17 @@ def connect_wifi(ssid, password, timeout=10, cached_bssid=None, cached_channel=N
     if cached_bssid:
         print(f"Fast reconnect (ch={cached_channel})...", end="")
         try:
-            wlan.connect(ssid, password, bssid=cached_bssid)
+            if cached_channel is not None:
+                wlan.connect(ssid, password, bssid=cached_bssid, channel=cached_channel)
+                print(f" [ch={cached_channel}]", end="")
+            else:
+                wlan.connect(ssid, password, bssid=cached_bssid)
         except TypeError:
-            wlan.connect(ssid, password)
+            print(" [ch skipped]", end="")
+            try:
+                wlan.connect(ssid, password, bssid=cached_bssid)
+            except TypeError:
+                wlan.connect(ssid, password)
 
         # Short timeout for fast reconnect
         start = time.ticks_ms()
@@ -646,8 +657,11 @@ def set_cpu_freq(mhz):
 # Duration threshold for long press (milliseconds)
 LONG_PRESS_MS = 1000
 
-# Low battery warning threshold (mV)
-BATTERY_LOW_MV = 3300
+# Low battery warning threshold (mV). Configurable via config.py.
+try:
+    from config import BATTERY_LOW_MV
+except (ImportError, AttributeError):
+    BATTERY_LOW_MV = 3300
 
 def measure_button_press(button_gpio, led, timeout_ms=5000):
     """

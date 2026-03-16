@@ -121,7 +121,7 @@ class FakeWLAN:
     def isconnected(self):
         return self._connected
 
-    def connect(self, ssid=None, password=None, bssid=None):
+    def connect(self, ssid=None, password=None, bssid=None, channel=None):
         self._connected = True
 
     def disconnect(self):
