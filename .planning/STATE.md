@@ -75,6 +75,10 @@ Recent decisions affecting current work:
 - [Phase 03-low-battery-warning]: BATTERY_LOW_MV=3300 threshold with strict less-than check
 - [Phase 08-logging-control]: log() with numeric level mapping (silent=0, minimal=1, verbose=2) for configurable serial output
 
+### Roadmap Evolution
+
+- Phase 09.1 inserted after Phase 9: Final Power Micro-Optimizations (URGENT)
+
 ### Pending Todos
 
 None yet.

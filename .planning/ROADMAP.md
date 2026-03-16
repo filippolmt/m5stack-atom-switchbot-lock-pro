@@ -161,3 +161,13 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 | 7. Power Configuration Constants | 0/1 | Planning complete | - |
 | 8. Logging Control | 0/1 | Planning complete | - |
 | 9. Documentation Update | 0/0 | Not started | - |
+
+### Phase 09.1: Final Power Micro-Optimizations (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 9
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 09.1 to break down)
