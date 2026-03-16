@@ -28,8 +28,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Power Profile
 
 - [ ] **PWR-01**: Costanti configurabili in config.py: luminosita LED, soglie batteria, verbosita logging
-- [ ] **PWR-02**: Print seriali ridotte in modalita produzione (configurabile via config.py)
-- [ ] **PWR-03**: Livello di logging configurabile (verbose/minimal/silent)
+- [x] **PWR-02**: Print seriali ridotte in modalita produzione (configurabile via config.py)
+- [x] **PWR-03**: Livello di logging configurabile (verbose/minimal/silent)
 
 ### Documentation
 
@@ -78,8 +78,8 @@ Deferred to future release. Tracked but not in current roadmap.
 | LED-03 | Phase 3 | Complete |
 | WIFI-01 | Phase 6 | Pending |
 | PWR-01 | Phase 7 | Pending |
-| PWR-02 | Phase 8 | Pending |
-| PWR-03 | Phase 8 | Pending |
+| PWR-02 | Phase 8 | Complete |
+| PWR-03 | Phase 8 | Complete |
 | DOC-01 | Phase 9 | Pending |
 | DOC-02 | Phase 9 | Pending |
 | DOC-03 | Phase 9 | Pending |
