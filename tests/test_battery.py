@@ -177,3 +177,40 @@ def test_low_battery_warning_at_threshold():
     assert len(led.blink_orange_calls) == 0, (
         "blink_orange should not be called at exact threshold (only below)"
     )
+
+
+# ---------------------------------------------------------------------------
+# Configurable power constants tests (PWR-01)
+# ---------------------------------------------------------------------------
+
+def test_default_led_brightness():
+    """LED_BRIGHTNESS defaults to 32 when not in config.py."""
+    assert main.LED_BRIGHTNESS == 32, f"Expected default 32, got {main.LED_BRIGHTNESS}"
+
+
+def test_default_battery_low_mv():
+    """BATTERY_LOW_MV defaults to 3300 when not in config.py."""
+    assert main.BATTERY_LOW_MV == 3300, f"Expected default 3300, got {main.BATTERY_LOW_MV}"
+
+
+def test_check_low_battery_uses_module_constant():
+    """check_low_battery() uses BATTERY_LOW_MV module constant, not a hardcoded value."""
+    original = main.BATTERY_LOW_MV
+    try:
+        main.BATTERY_LOW_MV = 3500
+        led = MockLED()
+        main.check_low_battery(3400, led)
+        assert len(led.blink_orange_calls) == 1, "Should warn at 3400 when threshold is 3500"
+        led2 = MockLED()
+        main.check_low_battery(3600, led2)
+        assert len(led2.blink_orange_calls) == 0, "Should not warn at 3600 when threshold is 3500"
+    finally:
+        main.BATTERY_LOW_MV = original
+
+
+def test_statusled_uses_led_brightness_constant():
+    """StatusLED default brightness comes from LED_BRIGHTNESS module constant."""
+    led = main.StatusLED(pin_num=27)
+    assert led.brightness == main.LED_BRIGHTNESS, (
+        f"StatusLED default brightness {led.brightness} != LED_BRIGHTNESS {main.LED_BRIGHTNESS}"
+    )

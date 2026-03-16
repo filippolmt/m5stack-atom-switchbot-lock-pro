@@ -16,3 +16,14 @@ BUTTON_GPIO = 39  # GPIO39 is the built-in button on M5Stack ATOM
 # Static IP (optional, saves ~500ms-1s per connection by skipping DHCP)
 # Format: (IP, subnet mask, gateway, DNS)
 # WIFI_STATIC_IP = ("192.168.1.100", "255.255.255.0", "192.168.1.1", "8.8.8.8")
+
+# Power configuration (optional)
+# LED brightness (0-255). Default: 32. Lower = less power, less visible.
+# LED_BRIGHTNESS = 32
+
+# Low battery warning threshold in millivolts. Default: 3300 (3.3V).
+# Orange LED blinks when battery drops below this value.
+# BATTERY_LOW_MV = 3300
+
+# Logging verbosity. Options: "verbose" (default), "minimal", "silent"
+# LOG_LEVEL = "verbose"
