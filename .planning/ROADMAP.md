@@ -86,10 +86,10 @@ Plans:
   1. Default LED brightness is 32 (down from 64), reducing NeoPixel current draw
   2. All blink durations are halved compared to current values
   3. LED feedback remains clearly visible in normal indoor lighting
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — Halve LED brightness (64->32) and all blink durations, add LED_BRIGHTNESS constant
 
 ### Phase 6: WiFi Channel Fast Reconnect
 **Goal**: WiFi reconnection is faster by passing cached channel to wlan.connect()
@@ -156,7 +156,7 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 | 2. Battery Voltage Reading | 0/1 | Planning complete | - |
 | 3. Low Battery Warning | 0/1 | Planning complete | - |
 | 4. Wake Cycle Counter | 0/1 | Planning complete | - |
-| 5. LED Power Reduction | 0/0 | Not started | - |
+| 5. LED Power Reduction | 0/1 | Planning complete | - |
 | 6. WiFi Channel Fast Reconnect | 0/0 | Not started | - |
 | 7. Power Configuration Constants | 0/0 | Not started | - |
 | 8. Logging Control | 0/0 | Not started | - |
