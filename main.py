@@ -228,6 +228,28 @@ def load_wake_counter():
     return 0
 
 
+def read_battery_voltage():
+    """
+    Read battery voltage in millivolts from GPIO 33 (Atomic Battery Base).
+    Uses lazy import to avoid system heap allocation before TLS.
+    Call AFTER WiFi disconnect.
+    Returns voltage in mV (e.g., 3850 for 3.85V), or 0 on failure.
+    """
+    try:
+        from machine import ADC, Pin
+        adc = ADC(Pin(33), atten=ADC.ATTN_11DB)
+        total_uv = 0
+        for _ in range(4):
+            total_uv += adc.read_uv()
+        avg_uv = total_uv // 4
+        # 1:1 voltage divider (2x 1MOhm): ADC sees V_BAT / 2
+        millivolts = avg_uv * 2 // 1000
+        return millivolts
+    except Exception as e:
+        print(f"ADC read failed: {e}")
+        return 0
+
+
 def unix_time_ms():
     """
     Return current Unix time in milliseconds.
@@ -752,6 +774,14 @@ def handle_button_wake(led):
         wlan.active(False)
     except Exception:
         pass  # Best-effort WiFi shutdown; device enters deep sleep next
+
+    # Read battery voltage (safe: WiFi is off, TLS is done)
+    battery_mv = read_battery_voltage()
+    if battery_mv > 0:
+        print(f"Battery: {battery_mv}mV")
+        save_battery_voltage(battery_mv)
+    else:
+        print("Battery: read failed")
 
     # LED feedback based on result (Wi-Fi already off, saving power)
     led.off()
