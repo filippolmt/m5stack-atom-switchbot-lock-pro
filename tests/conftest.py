@@ -71,6 +71,26 @@ class FakeWDT:
 
 
 machine.WDT = FakeWDT
+
+
+class FakeADC:
+    ATTN_0DB = 0
+    ATTN_2_5DB = 1
+    ATTN_6DB = 2
+    ATTN_11DB = 3
+
+    def __init__(self, pin, atten=0):
+        self._pin = pin
+        self._atten = atten
+        self._uv = 1_900_000  # Default: ~3800mV battery (1.9V at divider)
+        self._call_count = 0
+
+    def read_uv(self):
+        self._call_count += 1
+        return self._uv
+
+
+machine.ADC = FakeADC
 sys.modules["machine"] = machine
 
 # ---------------------------------------------------------------------------
