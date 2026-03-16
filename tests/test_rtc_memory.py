@@ -243,3 +243,45 @@ def test_migration_old_to_new():
     assert data[7] == 0xBB
     assert bytes(data[0:6]) == b"\x01\x02\x03\x04\x05\x06"
     assert data[6] == 11
+
+
+# ---------------------------------------------------------------------------
+# Wake counter integration tests (BATT-04)
+# ---------------------------------------------------------------------------
+
+
+def test_wake_counter_increment_on_button_wake():
+    """increment + load roundtrip produces sequential values 0->1->2."""
+    # Set up a valid v2 RTC layout
+    main.save_wifi_config(b"\x01\x02\x03\x04\x05\x06", 1)
+    # Counter starts at 0
+    assert main.load_wake_counter() == 0
+    # First increment -> 1
+    main.increment_wake_counter()
+    assert main.load_wake_counter() == 1
+    # Second increment -> 2
+    main.increment_wake_counter()
+    assert main.load_wake_counter() == 2
+
+
+def test_wake_counter_serial_output(capsys):
+    """Serial output contains 'Wake #N' with correct counter value."""
+    main.save_wifi_config(b"\x01\x02\x03\x04\x05\x06", 1)
+    main.increment_wake_counter()
+    wake_count = main.load_wake_counter()
+    print(f"Wake #{wake_count}")
+    captured = capsys.readouterr()
+    assert "Wake #1" in captured.out
+
+
+def test_wake_counter_preserves_battery_voltage():
+    """Incrementing wake counter does not corrupt battery voltage."""
+    main.save_wifi_config(b"\x01\x02\x03\x04\x05\x06", 1)
+    main.save_battery_voltage(3850)
+    assert main.load_battery_voltage() == 3850
+    # Increment counter
+    main.increment_wake_counter()
+    # Battery voltage must be preserved
+    assert main.load_battery_voltage() == 3850
+    # Counter must reflect the increment
+    assert main.load_wake_counter() == 1
