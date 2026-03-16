@@ -104,12 +104,12 @@ def sync_time_via_ntp():
     try:
         import ntptime
 
-        print("Synchronizing time via NTP...")
+        log("Synchronizing time via NTP...")
         ntptime.settime()  # Set UTC time
-        print("✓ Time synchronized via NTP (UTC).")
+        log("✓ Time synchronized via NTP (UTC).")
     except Exception as e:
-        print("✗ Unable to synchronize time via NTP:", e)
-        print("  WARNING: if the clock is wrong, the SwitchBot API can reply with 401.")
+        log("✗ Unable to synchronize time via NTP:", e, level="minimal")
+        log("  WARNING: if the clock is wrong, the SwitchBot API can reply with 401.", level="minimal")
 
 
 def ensure_time_synced(min_year=2024):
@@ -120,18 +120,19 @@ def ensure_time_synced(min_year=2024):
     try:
         current_year = time.gmtime()[0]
         if current_year < min_year:
-            print(f"Clock seems unsynchronized (year={current_year}). Trying NTP...")
+            log(f"Clock seems unsynchronized (year={current_year}). Trying NTP...")
             sync_time_via_ntp()
             current_year = time.gmtime()[0]
 
         if current_year < min_year:
-            print(
-                f"Clock still invalid after NTP (year={current_year}). Aborting request."
+            log(
+                f"Clock still invalid after NTP (year={current_year}). Aborting request.",
+                level="minimal",
             )
             return False
         return True
     except Exception as e:
-        print("✗ Unable to verify system time:", e)
+        log("✗ Unable to verify system time:", e, level="minimal")
         return False
 
 
@@ -164,7 +165,7 @@ def save_wifi_config(bssid, channel):
         # else: bytes 8-11 stay 0x00 (initialized by bytearray)
         rtc.memory(data)
     except Exception as e:
-        print(f"Could not save Wi-Fi config: {e}")
+        log(f"Could not save Wi-Fi config: {e}", level="minimal")
 
 
 def load_wifi_config():
@@ -269,14 +270,14 @@ def read_battery_voltage():
         millivolts = avg_uv * 2 // 1000
         return millivolts
     except Exception as e:
-        print(f"ADC read failed: {e}")
+        log(f"ADC read failed: {e}", level="minimal")
         return 0
 
 
 def check_low_battery(battery_mv, led):
     """Blink orange LED if battery is below threshold. Call AFTER normal LED feedback."""
     if battery_mv > 0 and battery_mv < BATTERY_LOW_MV:
-        print(f"WARNING: Low battery ({battery_mv}mV < {BATTERY_LOW_MV}mV)")
+        log(f"WARNING: Low battery ({battery_mv}mV < {BATTERY_LOW_MV}mV)", level="minimal")
         led.blink_orange(times=3, on_ms=100, off_ms=75)
 
 
@@ -469,18 +470,18 @@ class SwitchBotController:
 
         for attempt in range(retries + 1):
             if attempt > 0:
-                print(f"Retry {attempt}/{retries}...")
+                log(f"Retry {attempt}/{retries}...")
                 time.sleep_ms(500)  # Brief delay before retry
 
             # Regenerate headers for each attempt (fresh timestamp/nonce)
             headers = self._build_auth_headers()
 
             try:
-                print(f"Sending {command.upper()} command...")
+                log(f"Sending {command.upper()} command...")
                 response = urequests.post(url, headers=headers, data=data)
 
                 if response is None:
-                    print("✗ No response from the API.")
+                    log("✗ No response from the API.", level="minimal")
                     gc.collect()
                     continue  # Retry
 
@@ -497,18 +498,18 @@ class SwitchBotController:
                         pass  # Socket may already be closed
 
                 gc.collect()
-                print("HTTP status:", status)
-                print("Response:", text)
+                log("HTTP status:", status, level="minimal")
+                log("Response:", text, level="minimal")
 
                 if status == 200:
                     return "success"
 
                 if status == 401:
-                    print("✗ Authentication failed (401). Check token/secret.")
+                    log("✗ Authentication failed (401). Check token/secret.", level="minimal")
                     return "auth_error"
 
             except Exception as e:
-                print(f"✗ Exception while sending the command: {e}")
+                log(f"✗ Exception while sending the command: {e}", level="minimal")
                 gc.collect()
                 continue  # Retry
 
@@ -540,33 +541,33 @@ def connect_wifi(ssid, password, timeout=10, cached_bssid=None, cached_channel=N
     wlan.active(True)
 
     if wlan.isconnected():
-        print("Already connected to Wi-Fi")
-        print(f"IP: {wlan.ifconfig()[0]}")
+        log("Already connected to Wi-Fi")
+        log(f"IP: {wlan.ifconfig()[0]}")
         return True
 
     # Use static IP if configured (skips DHCP, saves ~500ms-1s)
     try:
         from config import WIFI_STATIC_IP
         wlan.ifconfig(WIFI_STATIC_IP)
-        print(f"Static IP: {WIFI_STATIC_IP[0]}")
+        log(f"Static IP: {WIFI_STATIC_IP[0]}")
     except (ImportError, AttributeError):
         pass  # WIFI_STATIC_IP not configured; use DHCP
     except (ValueError, OSError) as e:
-        print(f"  Static IP rejected, using DHCP: {e}")  # Malformed tuple or driver error
+        log(f"  Static IP rejected, using DHCP: {e}")  # Malformed tuple or driver error
 
     # Try fast reconnect using cached BSSID (use pre-loaded or read from RTC)
     if cached_bssid is None:
         cached_bssid, cached_channel = load_wifi_config()
     if cached_bssid:
-        print(f"Fast reconnect (ch={cached_channel})...", end="")
+        log(f"Fast reconnect (ch={cached_channel})...", end="")
         try:
             if cached_channel is not None:
                 wlan.connect(ssid, password, bssid=cached_bssid, channel=cached_channel)
-                print(f" [ch={cached_channel}]", end="")
+                log(f" [ch={cached_channel}]", end="")
             else:
                 wlan.connect(ssid, password, bssid=cached_bssid)
         except TypeError:
-            print(" [ch skipped]", end="")
+            log(" [ch skipped]", end="")
             try:
                 wlan.connect(ssid, password, bssid=cached_bssid)
             except TypeError:
@@ -576,27 +577,27 @@ def connect_wifi(ssid, password, timeout=10, cached_bssid=None, cached_channel=N
         start = time.ticks_ms()
         while not wlan.isconnected():
             if time.ticks_diff(time.ticks_ms(), start) > 4000:  # 4s fast timeout
-                print(" timeout")
+                log(" timeout")
                 wlan.disconnect()
                 clear_wifi_config()  # Clear invalid cache
                 break
             time.sleep_ms(50)
 
         if wlan.isconnected():
-            print(" OK!")
-            print(f"  IP: {wlan.ifconfig()[0]}")
+            log(" OK!")
+            log(f"  IP: {wlan.ifconfig()[0]}")
             return True
 
-        print("Fast reconnect failed, trying normal scan...")
+        log("Fast reconnect failed, trying normal scan...")
 
     # Normal connection with full scan
-    print(f"Connecting to Wi-Fi: {ssid}...")
+    log(f"Connecting to Wi-Fi: {ssid}...")
     wlan.connect(ssid, password)
 
     start = time.ticks_ms()
     while not wlan.isconnected():
         if time.ticks_diff(time.ticks_ms(), start) > timeout * 1000:
-            print("\n✗ Wi-Fi connection timeout!")
+            log("\n✗ Wi-Fi connection timeout!", level="minimal")
             try:
                 wlan.disconnect()
                 wlan.active(False)
@@ -604,10 +605,10 @@ def connect_wifi(ssid, password, timeout=10, cached_bssid=None, cached_channel=N
                 pass  # Best-effort WiFi cleanup on timeout; ignore errors
             return False
         time.sleep_ms(50)
-        print(".", end="")
+        log(".", end="")
 
-    print("\n✓ Connected to Wi-Fi!")
-    print(f"  IP: {wlan.ifconfig()[0]}")
+    log("\n✓ Connected to Wi-Fi!")
+    log(f"  IP: {wlan.ifconfig()[0]}")
 
     # Cache connected AP's BSSID for fast reconnect.
     # Try wlan.config('bssid') first (instant), fall back to scan (~1-2s).
@@ -616,7 +617,7 @@ def connect_wifi(ssid, password, timeout=10, cached_bssid=None, cached_channel=N
         if isinstance(bssid, bytes) and len(bssid) == 6 and bssid != b'\x00\x00\x00\x00\x00\x00':
             channel = wlan.config('channel') if hasattr(wlan, 'config') else 0
             save_wifi_config(bssid, channel)
-            print(f"  Cached ch={channel} for fast reconnect")
+            log(f"  Cached ch={channel} for fast reconnect")
         else:
             raise ValueError("no bssid from config")
     except Exception:
@@ -631,9 +632,9 @@ def connect_wifi(ssid, password, timeout=10, cached_bssid=None, cached_channel=N
                         best_ap = ap
             if best_ap:
                 save_wifi_config(bytes(best_ap[1]), best_ap[2])
-                print(f"  Cached ch={best_ap[2]} for fast reconnect (scan)")
+                log(f"  Cached ch={best_ap[2]} for fast reconnect (scan)")
         except Exception as e:
-            print(f"  Could not cache Wi-Fi config: {e}")
+            log(f"  Could not cache Wi-Fi config: {e}")
 
     return True
 
@@ -645,10 +646,10 @@ def enter_deep_sleep(button_gpio):
     Args:
         button_gpio: GPIO pin number for wake button
     """
-    print("\nEntering deep sleep...")
-    print(f"  Wake trigger: GPIO{button_gpio} LOW (button press)")
-    print("  Power consumption: ~10uA")
-    print("=" * 50)
+    log("\nEntering deep sleep...")
+    log(f"  Wake trigger: GPIO{button_gpio} LOW (button press)")
+    log("  Power consumption: ~10uA")
+    log("=" * 50)
 
     # Configure wake on EXT0 (single pin, level-triggered)
     # GPIO 39 is RTC_GPIO3, supports deep sleep wake
@@ -742,22 +743,22 @@ def handle_button_wake(led):
     Returns:
         str: Result code from send_command or "wifi_error"
     """
-    print("\n" + "=" * 50)
-    print("WAKE FROM DEEP SLEEP - Button pressed!")
-    print("=" * 50)
+    log("\n" + "=" * 50)
+    log("WAKE FROM DEEP SLEEP - Button pressed!")
+    log("=" * 50)
 
     # Increment wake counter (simple RTC byte write, no system heap impact)
     increment_wake_counter()
     wake_count = load_wake_counter()
-    print(f"Wake #{wake_count}")
+    log(f"Wake #{wake_count}", level="minimal")
 
     # Measure button press duration (with visual feedback)
     press_duration = measure_button_press(BUTTON_GPIO, led)
     is_lock = press_duration >= LONG_PRESS_MS
     command = "lock" if is_lock else "unlock"
 
-    print(f"Button held for {press_duration}ms")
-    print(f"Action: {command.upper()}")
+    log(f"Button held for {press_duration}ms")
+    log(f"Action: {command.upper()}")
 
     # Boost CPU for Wi-Fi operations
     set_cpu_freq(160)
@@ -766,7 +767,7 @@ def handle_button_wake(led):
     cached_bssid, cached_channel = load_wifi_config()
     if cached_bssid:
         led.cyan()  # Cyan = fast reconnect
-        print(f"Fast reconnect available (ch={cached_channel})")
+        log(f"Fast reconnect available (ch={cached_channel})")
     else:
         led.blue()  # Blue = normal Wi-Fi scan
 
@@ -774,7 +775,7 @@ def handle_button_wake(led):
     if not connect_wifi(WIFI_SSID, WIFI_PASSWORD, timeout=10,
                         cached_bssid=cached_bssid,
                         cached_channel=cached_channel):
-        print("✗ Cannot connect to Wi-Fi")
+        log("✗ Cannot connect to Wi-Fi", level="minimal")
         led.off()
         led.blink_orange(times=3, on_ms=150, off_ms=100)
         set_cpu_freq(80)
@@ -789,9 +790,9 @@ def handle_button_wake(led):
     # Only sync NTP if time is invalid (RTC survives deep sleep)
     ntp_ok = True
     if is_time_valid():
-        print("✓ RTC time valid, skipping NTP sync")
+        log("✓ RTC time valid, skipping NTP sync")
     else:
-        print("RTC time invalid, syncing NTP...")
+        log("RTC time invalid, syncing NTP...")
         try:
             sync_time_via_ntp()
             if not is_time_valid():
@@ -800,7 +801,7 @@ def handle_button_wake(led):
             ntp_ok = False
 
         if not ntp_ok:
-            print("⚠ NTP sync failed, attempting anyway...")
+            log("⚠ NTP sync failed, attempting anyway...", level="minimal")
             led.off()
             led.blink_yellow(times=2, on_ms=150, off_ms=100)
             if is_lock:
@@ -826,28 +827,28 @@ def handle_button_wake(led):
     # Read battery voltage (safe: WiFi is off, TLS is done)
     battery_mv = read_battery_voltage()
     if battery_mv > 0:
-        print(f"Battery: {battery_mv}mV | Wake #{wake_count}")
+        log(f"Battery: {battery_mv}mV | Wake #{wake_count}", level="minimal")
         save_battery_voltage(battery_mv)
     else:
-        print("Battery: read failed")
+        log("Battery: read failed", level="minimal")
 
     # LED feedback based on result (Wi-Fi already off, saving power)
     led.off()
     if result == "success":
         if is_lock:
-            print("✓ Door locked successfully!")
+            log("✓ Door locked successfully!", level="minimal")
             led.blink_purple(times=2, on_ms=150, off_ms=50)
         else:
-            print("✓ Door unlocked successfully!")
+            log("✓ Door unlocked successfully!", level="minimal")
             led.blink_green(times=2, on_ms=150, off_ms=50)
     elif result == "auth_error":
-        print("✗ Authentication error (401)")
+        log("✗ Authentication error (401)", level="minimal")
         led.blink_fast_red(times=6, on_ms=50, off_ms=50)
     elif result == "time_error":
-        print("✗ Time sync error")
+        log("✗ Time sync error", level="minimal")
         led.blink_yellow(times=4, on_ms=100, off_ms=100)
     else:  # api_error or other
-        print("✗ API error")
+        log("✗ API error", level="minimal")
         led.blink_red(times=3, on_ms=100, off_ms=100)
 
     # Low battery warning (after normal feedback, before deep sleep)
@@ -880,16 +881,16 @@ def main():
         handle_button_wake(led)
     else:
         # Fresh boot (power on or reset)
-        print("\n" + "=" * 50)
-        print("M5Stack ATOM Lite - SwitchBot Lock Pro Controller")
-        print("          (Deep Sleep Version)")
-        print("=" * 50)
-        print(f"\nDevice ID: {SWITCHBOT_DEVICE_ID}")
-        print(f"Wake button: GPIO{BUTTON_GPIO}")
-        print(f"Long press threshold: {LONG_PRESS_MS}ms")
-        print("\nControls:")
-        print("  Short press (<1s) = UNLOCK (green LED)")
-        print("  Long press  (>1s) = LOCK   (purple LED)")
+        log("\n" + "=" * 50)
+        log("M5Stack ATOM Lite - SwitchBot Lock Pro Controller")
+        log("          (Deep Sleep Version)")
+        log("=" * 50)
+        log(f"\nDevice ID: {SWITCHBOT_DEVICE_ID}")
+        log(f"Wake button: GPIO{BUTTON_GPIO}")
+        log(f"Long press threshold: {LONG_PRESS_MS}ms")
+        log("\nControls:")
+        log("  Short press (<1s) = UNLOCK (green LED)")
+        log("  Long press  (>1s) = LOCK   (purple LED)")
 
         # Brief LED flash to indicate ready (green then purple)
         led.blink_green(times=1, on_ms=150, off_ms=50)
