@@ -33,10 +33,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Device with old 0xAA layout gracefully falls back — WiFi BSSID cache still works after firmware update
   3. Bytes 8-9 reserved for battery voltage (mV), byte 10 for wake counter, byte 11 reserved
   4. Existing save_wifi_config/load_wifi_config functions work correctly with the extended layout
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md — Extend RTC memory to 12 bytes with TDD (tests + implementation)
 
 ### Phase 2: Battery Voltage Reading
 **Goal**: User can see the battery voltage on serial output every time the device wakes
@@ -152,7 +152,7 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. RTC Memory Layout Extension | 0/0 | Not started | - |
+| 1. RTC Memory Layout Extension | 0/1 | Planning complete | - |
 | 2. Battery Voltage Reading | 0/0 | Not started | - |
 | 3. Low Battery Warning | 0/0 | Not started | - |
 | 4. Wake Cycle Counter | 0/0 | Not started | - |
