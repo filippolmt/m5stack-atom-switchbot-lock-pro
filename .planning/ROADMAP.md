@@ -126,10 +126,10 @@ Plans:
   2. In "minimal" mode, only errors and battery voltage are printed
   3. In "silent" mode, no serial output occurs (saves time spent on UART transmission)
   4. Default behavior (no LOG_LEVEL set) matches current verbose output for backward compatibility
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 08-01: TBD
+- [ ] 08-01-PLAN.md — Create log() function with level filtering and replace all print() calls
 
 ### Phase 9: Documentation Update
 **Goal**: README and CLAUDE.md reflect the new battery monitoring capabilities and realistic autonomy estimates
@@ -159,5 +159,5 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 | 5. LED Power Reduction | 0/1 | Planning complete | - |
 | 6. WiFi Channel Fast Reconnect | 0/1 | Planning complete | - |
 | 7. Power Configuration Constants | 0/0 | Not started | - |
-| 8. Logging Control | 0/0 | Not started | - |
+| 8. Logging Control | 0/1 | Planning complete | - |
 | 9. Documentation Update | 0/0 | Not started | - |
