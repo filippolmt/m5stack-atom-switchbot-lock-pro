@@ -73,10 +73,10 @@ Plans:
   1. Wake counter in RTC memory byte 10 increments on every button press wake
   2. Counter value is printed to serial output alongside battery voltage
   3. Counter wraps at 255 (single byte) without corrupting other RTC memory fields
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md — Wire increment_wake_counter() into handle_button_wake() with serial output and tests
 
 ### Phase 5: LED Power Reduction
 **Goal**: LED feedback uses less energy per wake cycle while remaining visible
@@ -155,7 +155,7 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 | 1. RTC Memory Layout Extension | 0/1 | Planning complete | - |
 | 2. Battery Voltage Reading | 0/1 | Planning complete | - |
 | 3. Low Battery Warning | 0/1 | Planning complete | - |
-| 4. Wake Cycle Counter | 0/0 | Not started | - |
+| 4. Wake Cycle Counter | 0/1 | Planning complete | - |
 | 5. LED Power Reduction | 0/0 | Not started | - |
 | 6. WiFi Channel Fast Reconnect | 0/0 | Not started | - |
 | 7. Power Configuration Constants | 0/0 | Not started | - |
