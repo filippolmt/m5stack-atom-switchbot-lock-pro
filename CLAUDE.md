@@ -57,7 +57,11 @@ Check reset_cause()
 │   4. NTP sync (skip if RTC valid)   │
 │   5. API lock/unlock (retry once)   │
 │   6. Wi-Fi disconnect               │
-│   7. LED feedback (color by result) │
+│   7. CPU → 80MHz                    │
+│   8. ADC battery read (GPIO 33)     │
+│   9. LED feedback (color by result) │
+│  10. Low battery warning (if <3.3V) │
+│  11. NeoPixel GPIO hold LOW         │
 └─────────────────────────────────────┘
     ↓
 Deep Sleep (wake on GPIO 39 LOW)
@@ -81,6 +85,7 @@ Deep Sleep (wake on GPIO 39 LOW)
 | Yellow (2 blinks) | NTP sync failed (continuing) |
 | Yellow (4 blinks) | Time sync error |
 | Orange (3 blinks) | Wi-Fi timeout |
+| Orange (3 blinks, after feedback) | Low battery warning (<3.3V) |
 | Red (3 blinks) | API error |
 | Red (6 fast) | Auth error (401) |
 
@@ -181,8 +186,15 @@ Optional:
 
 ### Automated Tests (Docker)
 ```bash
-make test          # Build image + run 106 tests in Docker (Python 3.13)
-make test-clean    # Remove test Docker image
+make test                              # Build image + run 106 tests in Docker (Python 3.13)
+make test-clean                        # Remove test Docker image
+```
+
+### Run a Single Test (local, requires Python 3.13+)
+```bash
+python -m pytest tests/test_battery.py -v              # All tests in a file
+python -m pytest tests/test_battery.py::test_name -v   # Single test by name
+python -m pytest tests/ -k "wifi" -v                   # Tests matching keyword
 ```
 
 Tests run on CPython via hardware stubs injected in `tests/conftest.py`. No MicroPython or hardware required.
@@ -199,6 +211,9 @@ Tests run on CPython via hardware stubs injected in `tests/conftest.py`. No Micr
 | `test_logging.py` | Log level filtering, kwargs passthrough, defaults |
 | `test_power_optimizations.py` | CPU freq reset, serial flush timing, GPIO hold, retry delay |
 | `test_wifi.py` | `connect_wifi()` timeout, already-connected, channel passing, fallback chain |
+
+### Test Architecture
+`tests/conftest.py` injects fake MicroPython modules (`machine`, `esp32`, `network`, `neopixel`, `ntptime`, `urequests`, `config`) into `sys.modules` BEFORE `import main`. This lets the entire firmware load on CPython unchanged. Key stubs: `FakeRTC` (variable-size memory), `FakeWLAN`, `FakeADC`, `FakeNeoPixel`. The `_reset_rtc` fixture resets RTC memory between tests.
 
 ### Manual Validation (on hardware)
 1. Monitor serial output at 115200 baud
