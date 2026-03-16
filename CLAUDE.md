@@ -119,6 +119,8 @@ The ESP32-PICO-D4 (no PSRAM) has two separate heaps: the **Python GC heap** (`gc
 - Minimal module-level globals — every global allocation shifts the system heap layout
 - ADC reads (`read_battery_voltage()`) AFTER WiFi disconnect — safe because TLS is done
 - `try: from config import X / except: X = default` for optional config — safe because config module is already loaded
+- `esp32.gpio_hold_en(Pin(27))` in `enter_deep_sleep()` — holds NeoPixel data pin LOW to reduce WS2812 quiescent current during sleep
+- `set_cpu_freq(80)` after WiFi disconnect, before LED feedback — saves ~15mA during blink sequences
 
 ## Performance & Power Optimizations
 
@@ -132,6 +134,10 @@ The ESP32-PICO-D4 (no PSRAM) has two separate heaps: the **Python GC heap** (`gc
 | Shorter LED blinks | ~400ms wake time | Halved blink durations (brightness 32) |
 | WiFi channel cache | ~100ms | Cached channel passed to `wlan.connect()` |
 | Log level control | ~50-100ms | `LOG_LEVEL = "silent"` skips UART transmission |
+| CPU 80MHz during LED | ~15mA saved | `set_cpu_freq(80)` after WiFi disconnect, before LED blinks |
+| Serial flush 20ms | ~80ms saved | Reduced from 100ms in `enter_deep_sleep()` |
+| NeoPixel GPIO hold | ~0.5-1mA sleep | `gpio_hold_en(27)` keeps LED data pin LOW during deep sleep |
+| Retry delay 300ms | ~200ms saved | Reduced from 500ms (only affects error retries) |
 | API retry | +reliability | Single retry, skip on 401 errors |
 
 **Result**: First press ~3-5s, subsequent presses ~1-2s
@@ -175,7 +181,7 @@ Optional:
 
 ### Automated Tests (Docker)
 ```bash
-make test          # Build image + run 101 tests in Docker (Python 3.13)
+make test          # Build image + run 106 tests in Docker (Python 3.13)
 make test-clean    # Remove test Docker image
 ```
 
@@ -191,6 +197,7 @@ Tests run on CPython via hardware stubs injected in `tests/conftest.py`. No Micr
 | `test_led.py` | `StatusLED._scale()` brightness math, brightness constant, blink defaults |
 | `test_battery.py` | ADC voltage reading, low-battery warning, configurable threshold |
 | `test_logging.py` | Log level filtering, kwargs passthrough, defaults |
+| `test_power_optimizations.py` | CPU freq reset, serial flush timing, GPIO hold, retry delay |
 | `test_wifi.py` | `connect_wifi()` timeout, already-connected, channel passing, fallback chain |
 
 ### Manual Validation (on hardware)

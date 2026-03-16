@@ -19,7 +19,8 @@ This project provides a complete solution to integrate your M5Stack ATOM (ESP32)
 - ✅ **Multicolor LED feedback** - Different colors indicate status and errors (brightness optimized)
 - ✅ **SwitchBot API v1.1** with signed token + secret headers
 - ✅ **Auto retry** - Retries API call once on failure
-- ✅ **Automated test suite** - 101 tests via Docker (Python 3.13 + pytest)
+- ✅ **NeoPixel GPIO hold** - Holds LED data pin LOW during deep sleep to reduce quiescent current
+- ✅ **Automated test suite** - 106 tests via Docker (Python 3.13 + pytest)
 - ✅ **CI/CD** - GitHub Actions runs tests on push/PR
 - ✅ **Complete setup guide** for VS Code + MicroPython
 
@@ -142,7 +143,9 @@ Then press the button on the M5Stack ATOM to control the lock.
    - Syncs time via NTP (skipped if RTC valid)
    - Sends lock/unlock command to SwitchBot API
    - Disconnects Wi-Fi immediately after response
+   - CPU scales back to 80MHz for LED feedback (power saving)
    - LED feedback based on result (Wi-Fi already off)
+   - NeoPixel GPIO held LOW during deep sleep
    - Returns to deep sleep
 3. **Battery monitoring** (after API call):
    - Reads battery voltage via ADC on GPIO 33
@@ -193,11 +196,13 @@ The project supports the [M5Stack Atomic Battery Base](https://docs.m5stack.com/
 
 ### Realistic Battery Life
 
-**Important:** The M5Stack ATOM Lite draws **4-11mA in deep sleep** (not 10uA) due to the always-on USB/serial chip and NeoPixel quiescent current. With the 200mAh battery:
+**Important:** The M5Stack ATOM Lite draws **4-11mA in deep sleep** (not 10uA) due to the always-on USB/serial chip. The firmware mitigates NeoPixel quiescent current via GPIO hold during sleep. With the 200mAh battery:
 
-- **Estimated autonomy: 12-40 hours** depending on board revision
+- **Estimated autonomy: 18-50 hours** depending on board revision (with GPIO hold optimization)
+- Without GPIO hold: 12-40 hours
 - Wake cycle consumption (~80-150mA for 1-5s) is <0.5% of total drain
-- **Sleep current dominates** — firmware optimizations provide marginal improvement
+- **Sleep current dominates** — the USB/serial chip (3-5mA) is the main drain and cannot be disabled in software
+- For longer battery life, consider a larger battery (750-1000mAh → 3-8 days)
 
 ### Charging
 
@@ -311,7 +316,7 @@ make test-clean    # Remove the test Docker image
 
 Tests also run automatically via GitHub Actions on every push and PR to `main`.
 
-**What's tested** (101 test cases):
+**What's tested** (106 test cases):
 
 | Area | Tests |
 |------|-------|
@@ -323,6 +328,7 @@ Tests also run automatically via GitHub Actions on every push and PR to `main`.
 | LED brightness | `_scale()` math, brightness constant, blink defaults |
 | Battery monitoring | ADC voltage reading, low-battery warning, configurable threshold |
 | Logging | Log level filtering, kwargs passthrough, defaults |
+| Power optimizations | CPU freq reset, serial flush timing, GPIO hold, retry delay |
 | Wi-Fi connect | Already-connected, timeout, fast reconnect, channel passing, fallback chain |
 
 ## 🛠️ Troubleshooting
