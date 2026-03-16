@@ -99,10 +99,10 @@ Plans:
   1. Cached WiFi channel from RTC memory byte 6 is passed to wlan.connect() as channel parameter
   2. Reconnect time measurably improves (~100ms faster) on serial output timestamps
   3. Device still connects successfully if cached channel is stale or wrong (fallback works)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 06-01: TBD
+- [ ] 06-01-PLAN.md — Pass cached channel to wlan.connect() with 3-tier TypeError fallback and tests
 
 ### Phase 7: Power Configuration Constants
 **Goal**: User can tune power-related behavior via config.py without modifying main.py
@@ -157,7 +157,7 @@ Note: Phase 4 and Phase 5 can run in parallel with Phase 2-3 (independent tracks
 | 3. Low Battery Warning | 0/1 | Planning complete | - |
 | 4. Wake Cycle Counter | 0/1 | Planning complete | - |
 | 5. LED Power Reduction | 0/1 | Planning complete | - |
-| 6. WiFi Channel Fast Reconnect | 0/0 | Not started | - |
+| 6. WiFi Channel Fast Reconnect | 0/1 | Planning complete | - |
 | 7. Power Configuration Constants | 0/0 | Not started | - |
 | 8. Logging Control | 0/0 | Not started | - |
 | 9. Documentation Update | 0/0 | Not started | - |
