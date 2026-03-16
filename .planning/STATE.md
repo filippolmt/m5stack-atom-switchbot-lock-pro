@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-16T21:29:28.189Z"
+stopped_at: Completed 09.1-01-PLAN.md
+last_updated: "2026-03-16T21:42:10.172Z"
 last_activity: 2026-03-16 — Phase 2 Plan 1 complete
 progress:
-  total_phases: 9
-  completed_phases: 6
-  total_plans: 8
-  completed_plans: 6
+  total_phases: 10
+  completed_phases: 7
+  total_plans: 9
+  completed_plans: 7
   percent: 100
 ---
 
@@ -53,6 +53,7 @@ Progress: [██████████] 100%
 | Phase 02-battery-voltage-reading P01 | 2min | 2 tasks | 3 files |
 | Phase 03-low-battery-warning P01 | 2min | 2 tasks | 2 files |
 | Phase 08-logging-control P01 | 5min | 2 tasks | 2 files |
+| Phase 09.1-final-power-micro-optimizations P01 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,7 @@ Recent decisions affecting current work:
 - [Phase 03-low-battery-warning]: Shorter blink timing (200ms/150ms) for secondary warning to minimize wake time
 - [Phase 03-low-battery-warning]: BATTERY_LOW_MV=3300 threshold with strict less-than check
 - [Phase 08-logging-control]: log() with numeric level mapping (silent=0, minimal=1, verbose=2) for configurable serial output
+- [Phase 09.1-final-power-micro-optimizations]: All four power optimizations placed after WiFi/TLS for mbedTLS heap safety
 
 ### Roadmap Evolution
 
@@ -91,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T21:24:04.225Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-03-16T21:42:10.170Z
+Stopped at: Completed 09.1-01-PLAN.md
 Resume file: None
