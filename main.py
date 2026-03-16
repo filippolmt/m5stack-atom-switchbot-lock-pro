@@ -35,6 +35,23 @@ try:
 except (ImportError, AttributeError):
     LED_BRIGHTNESS = 32
 
+# Serial output verbosity. Configurable via config.py.
+try:
+    from config import LOG_LEVEL as _LOG_LEVEL
+    if _LOG_LEVEL not in ("verbose", "minimal", "silent"):
+        _LOG_LEVEL = "verbose"
+except (ImportError, AttributeError):
+    _LOG_LEVEL = "verbose"
+
+# Log level numeric mapping for fast comparison
+_LOG_LEVELS = {"silent": 0, "minimal": 1, "verbose": 2}
+
+
+def log(*args, level="verbose", **kwargs):
+    """Print with log level filtering. Levels: verbose, minimal, silent."""
+    if _LOG_LEVELS.get(level, 2) <= _LOG_LEVELS.get(_LOG_LEVEL, 2):
+        print(*args, **kwargs)
+
 # Try to use hmac if available, otherwise fall back to the manual version
 try:
     import hmac
