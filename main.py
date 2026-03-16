@@ -250,6 +250,13 @@ def read_battery_voltage():
         return 0
 
 
+def check_low_battery(battery_mv, led):
+    """Blink orange LED if battery is below threshold. Call AFTER normal LED feedback."""
+    if battery_mv > 0 and battery_mv < BATTERY_LOW_MV:
+        print(f"WARNING: Low battery ({battery_mv}mV < {BATTERY_LOW_MV}mV)")
+        led.blink_orange(times=3, on_ms=200, off_ms=150)
+
+
 def unix_time_ms():
     """
     Return current Unix time in milliseconds.
@@ -636,6 +643,9 @@ def set_cpu_freq(mhz):
 # Duration threshold for long press (milliseconds)
 LONG_PRESS_MS = 1000
 
+# Low battery warning threshold (mV)
+BATTERY_LOW_MV = 3300
+
 
 def measure_button_press(button_gpio, led, timeout_ms=5000):
     """
@@ -801,6 +811,9 @@ def handle_button_wake(led):
     else:  # api_error or other
         print("✗ API error")
         led.blink_red(times=3, on_ms=200, off_ms=200)
+
+    # Low battery warning (after normal feedback, before deep sleep)
+    check_low_battery(battery_mv, led)
 
     led.off()
 
