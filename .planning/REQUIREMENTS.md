@@ -1,7 +1,7 @@
 # Requirements: M5Stack ATOM SwitchBot Lock Pro — Battery Optimization
 
 **Defined:** 2026-03-16
-**Core Value:** Massima durata della batteria mantenendo l'affidabilità del lock/unlock
+**Core Value:** Massima durata della batteria mantenendo l'affidabilita del lock/unlock
 
 ## v1 Requirements
 
@@ -17,18 +17,18 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### LED Optimization
 
-- [ ] **LED-01**: Luminosità LED ridotta da 64 a 32 (default) per risparmio energetico
+- [ ] **LED-01**: Luminosita LED ridotta da 64 a 32 (default) per risparmio energetico
 - [ ] **LED-02**: Durata blink feedback ridotta (halved rispetto ai valori attuali)
 - [ ] **LED-03**: Warning LED arancione per low-battery integrato nel flusso wake
 
 ### WiFi Optimization
 
-- [ ] **WIFI-01**: Canale WiFi memorizzato in RTC memory passato a `wlan.connect()` per fast reconnect (~100ms più veloce)
+- [ ] **WIFI-01**: Canale WiFi memorizzato in RTC memory passato a `wlan.connect()` per fast reconnect (~100ms piu veloce)
 
 ### Power Profile
 
-- [ ] **PWR-01**: Costanti configurabili in config.py: luminosità LED, soglie batteria, verbosità logging
-- [ ] **PWR-02**: Print seriali ridotte in modalità produzione (configurabile via config.py)
+- [ ] **PWR-01**: Costanti configurabili in config.py: luminosita LED, soglie batteria, verbosita logging
+- [ ] **PWR-02**: Print seriali ridotte in modalita produzione (configurabile via config.py)
 - [ ] **PWR-03**: Livello di logging configurabile (verbose/minimal/silent)
 
 ### Documentation
@@ -49,7 +49,7 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ### Advanced Power
 
-- **PWR-04**: Skip LED feedback completamente (modalità ultra-low-power)
+- **PWR-04**: Skip LED feedback completamente (modalita ultra-low-power)
 - **PWR-05**: Profilo potenza selezionabile (normal/eco/ultra-eco)
 
 ## Out of Scope
@@ -57,38 +57,38 @@ Deferred to future release. Tracked but not in current roadmap.
 | Feature | Reason |
 |---------|--------|
 | Hardware mod (taglio chip USB) | Invalida garanzia, richiede saldatura, non firmware |
-| Light sleep mode | 80x più consumo del deep sleep, non adatto a device single-action |
+| Light sleep mode | 80x piu consumo del deep sleep, non adatto a device single-action |
 | WiFi power save modes | Rompono TLS handshake (confermato da test) |
-| OTA firmware update | Complessità e consumo eccessivi per questo milestone |
+| OTA firmware update | Complessita e consumo eccessivi per questo milestone |
 | Watchdog timer | Causa MBEDTLS_ERR_MPI_ALLOC_FAILED (confermato) |
-| Multi-device support | Un lock per config è sufficiente |
+| Multi-device support | Un lock per config e sufficiente |
 | Percentage display su LED | ADC ESP32 troppo impreciso per stima % affidabile in v1 |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BATT-01 | TBD | Pending |
-| BATT-02 | TBD | Pending |
-| BATT-03 | TBD | Pending |
-| BATT-04 | TBD | Pending |
-| BATT-05 | TBD | Pending |
-| LED-01 | TBD | Pending |
-| LED-02 | TBD | Pending |
-| LED-03 | TBD | Pending |
-| WIFI-01 | TBD | Pending |
-| PWR-01 | TBD | Pending |
-| PWR-02 | TBD | Pending |
-| PWR-03 | TBD | Pending |
-| DOC-01 | TBD | Pending |
-| DOC-02 | TBD | Pending |
-| DOC-03 | TBD | Pending |
+| BATT-01 | Phase 2 | Pending |
+| BATT-02 | Phase 3 | Pending |
+| BATT-03 | Phase 2 | Pending |
+| BATT-04 | Phase 4 | Pending |
+| BATT-05 | Phase 1 | Pending |
+| LED-01 | Phase 5 | Pending |
+| LED-02 | Phase 5 | Pending |
+| LED-03 | Phase 3 | Pending |
+| WIFI-01 | Phase 6 | Pending |
+| PWR-01 | Phase 7 | Pending |
+| PWR-02 | Phase 8 | Pending |
+| PWR-03 | Phase 8 | Pending |
+| DOC-01 | Phase 9 | Pending |
+| DOC-02 | Phase 9 | Pending |
+| DOC-03 | Phase 9 | Pending |
 
 **Coverage:**
 - v1 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-16*
-*Last updated: 2026-03-16 after initial definition*
+*Last updated: 2026-03-16 after roadmap creation*
