@@ -119,9 +119,12 @@ Then press the button on the M5Stack ATOM to control the lock.
 │   ├── test_hmac.py     # HMAC-SHA256 (manual + stdlib paths)
 │   ├── test_auth_headers.py  # API authentication headers
 │   ├── test_send_command.py  # HTTP retry logic & error handling
-│   ├── test_rtc_memory.py    # RTC memory serialization
-│   ├── test_led.py      # LED brightness scaling
-│   └── test_wifi.py     # Wi-Fi connection logic
+│   ├── test_rtc_memory.py    # RTC memory serialization (12-byte v2 layout)
+│   ├── test_led.py      # LED brightness scaling & defaults
+│   ├── test_battery.py  # ADC voltage reading & low-battery warning
+│   ├── test_logging.py  # Log level filtering
+│   ├── test_power_optimizations.py  # CPU freq, GPIO hold, timing
+│   └── test_wifi.py     # Wi-Fi connection & channel caching
 ├── Dockerfile.test      # Test runner image (Python 3.13 + pytest)
 ├── Makefile             # make test / make test-clean
 ├── pyproject.toml       # pytest configuration
@@ -134,26 +137,22 @@ Then press the button on the M5Stack ATOM to control the lock.
 
 ## 🔧 How It Works
 
-1. **On boot/reset**: Shows startup message, then enters deep sleep (~10uA)
+1. **On boot/reset**: Shows startup message, then enters deep sleep
 2. **When you press the button**:
-   - ESP32 wakes from deep sleep
+   - ESP32 wakes from deep sleep, increments wake counter
    - **Short press (<1s)** = UNLOCK (green LED while holding)
    - **Long press (≥1s)** = LOCK (purple LED while holding)
-   - Connects to Wi-Fi (fast reconnect if cached)
+   - Connects to Wi-Fi (fast reconnect with BSSID + channel cache)
    - Syncs time via NTP (skipped if RTC valid)
    - Sends lock/unlock command to SwitchBot API
-   - Disconnects Wi-Fi immediately after response
-   - CPU scales back to 80MHz for LED feedback (power saving)
-   - LED feedback based on result (Wi-Fi already off)
-   - NeoPixel GPIO held LOW during deep sleep
-   - Returns to deep sleep
-3. **Battery monitoring** (after API call):
-   - Reads battery voltage via ADC on GPIO 33
-   - Orange LED warning if below threshold (default 3.3V)
-   - Voltage and wake count logged to serial
-4. **Power consumption**:
-   - Deep sleep: ~10uA (ESP32 only) + board quiescent current
-   - Active (Wi-Fi + API call): ~80-150mA for 2-4 seconds
+   - Disconnects Wi-Fi, scales CPU to 80MHz
+   - Reads battery voltage via ADC (GPIO 33)
+   - LED feedback based on result
+   - Orange LED warning if battery below threshold
+   - NeoPixel GPIO held LOW, enters deep sleep
+3. **Power consumption**:
+   - Deep sleep: ~4-11mA (board-level, USB/serial chip always on)
+   - Active (Wi-Fi + API call): ~80-150mA for 1-5 seconds
    - LED feedback: ~12mA for ~0.25s (brightness 32, Wi-Fi already off)
 
 ## 🎮 Button Controls
@@ -268,15 +267,17 @@ Entering deep sleep...
 ==================================================
 WAKE FROM DEEP SLEEP - Button pressed!
 ==================================================
+Wake #42
 Button held for 450ms
 Action: UNLOCK
 Fast reconnect available (ch=1)
-Fast reconnect (ch=1)... OK!
+Fast reconnect (ch=1)... [ch=1] OK!
   IP: 192.168.178.87
 ✓ RTC time valid, skipping NTP sync
 Sending UNLOCK command...
 HTTP status: 200
 Response: {"statusCode":100,"body":{},"message":"success"}
+Battery: 3850mV | Wake #42
 ✓ Door unlocked successfully!
 
 Entering deep sleep...
@@ -287,6 +288,7 @@ Entering deep sleep...
 ==================================================
 WAKE FROM DEEP SLEEP - Button pressed!
 ==================================================
+Wake #1
 Button held for 1552ms
 Action: LOCK
 Connecting to Wi-Fi: MySSID...
@@ -300,6 +302,7 @@ Synchronizing time via NTP...
 Sending LOCK command...
 HTTP status: 200
 Response: {"statusCode":100,"body":{},"message":"success"}
+Battery: 4120mV | Wake #1
 ✓ Door locked successfully!
 
 Entering deep sleep...
