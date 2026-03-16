@@ -18,11 +18,16 @@ import gc
 import ubinascii
 import hashlib
 
-# RTC memory layout for fast reconnect:
+# RTC memory layout for fast reconnect + battery monitoring:
 # Bytes 0-5: BSSID (6 bytes)
 # Byte 6: Wi-Fi channel (1 byte)
-# Byte 7: Valid flag (0xAA = valid)
+# Byte 7: Valid flag (0xAA = old 8-byte, 0xBB = new 12-byte)
+# Byte 8: Battery voltage low byte (mV, uint16 LE) — written by Phase 2
+# Byte 9: Battery voltage high byte (mV, uint16 LE) — written by Phase 2
+# Byte 10: Wake counter (uint8, wraps at 255) — written by Phase 4
+# Byte 11: Reserved (0x00)
 _RTC_VALID_FLAG = 0xAA
+_RTC_VALID_FLAG_V2 = 0xBB  # Extended 12-byte layout
 
 # Try to use hmac if available, otherwise fall back to the manual version
 try:
@@ -119,16 +124,22 @@ def is_time_valid(min_year=2024):
 
 
 def save_wifi_config(bssid, channel):
-    """Save Wi-Fi BSSID and channel to RTC memory for fast reconnect."""
+    """Save Wi-Fi BSSID and channel to RTC memory (12-byte layout)."""
     try:
         if not isinstance(bssid, bytes) or len(bssid) != 6:
             return
         from machine import RTC
-        data = bytearray(8)
+        rtc = RTC()
+        old_data = rtc.memory()
+        data = bytearray(12)
         data[0:6] = bssid
         data[6] = channel & 0xFF
-        data[7] = _RTC_VALID_FLAG
-        RTC().memory(data)
+        data[7] = _RTC_VALID_FLAG_V2
+        # Preserve battery voltage and wake counter if upgrading from v2 data
+        if old_data and len(old_data) >= 12 and old_data[7] == _RTC_VALID_FLAG_V2:
+            data[8:12] = old_data[8:12]
+        # else: bytes 8-11 stay 0x00 (initialized by bytearray)
+        rtc.memory(data)
     except Exception as e:
         print(f"Could not save Wi-Fi config: {e}")
 
@@ -137,27 +148,84 @@ def load_wifi_config():
     """
     Load Wi-Fi config from RTC memory.
     Returns (bssid, channel) or (None, None) if not available.
+    Handles both old 0xAA (8-byte) and new 0xBB (12-byte) layouts.
     """
     try:
         from machine import RTC
         data = RTC().memory()
-        if data and len(data) >= 8 and data[7] == _RTC_VALID_FLAG:
+        if data and len(data) >= 12 and data[7] == _RTC_VALID_FLAG_V2:
+            bssid = bytes(data[0:6])
+            raw_channel = data[6]
+            channel = raw_channel if 0 < raw_channel <= 14 else None
+            return bssid, channel
+        elif data and len(data) >= 8 and data[7] == _RTC_VALID_FLAG:
             bssid = bytes(data[0:6])
             raw_channel = data[6]
             channel = raw_channel if 0 < raw_channel <= 14 else None
             return bssid, channel
     except Exception:
-        pass  # RTC memory unavailable or corrupted; return defaults below
+        pass
     return None, None
 
 
 def clear_wifi_config():
-    """Clear saved Wi-Fi config from RTC memory."""
+    """Clear saved Wi-Fi config and extended data from RTC memory."""
     try:
         from machine import RTC
-        RTC().memory(bytearray(8))
+        RTC().memory(bytearray(12))
     except Exception:
-        pass  # Best-effort clear; ignore if RTC unavailable
+        pass
+
+
+def save_battery_voltage(millivolts):
+    """Write battery voltage (mV) to RTC memory bytes 8-9. Call AFTER WiFi disconnect."""
+    try:
+        from machine import RTC
+        rtc = RTC()
+        data = bytearray(rtc.memory())
+        if len(data) >= 12 and data[7] == _RTC_VALID_FLAG_V2:
+            data[8] = millivolts & 0xFF
+            data[9] = (millivolts >> 8) & 0xFF
+            rtc.memory(data)
+    except Exception:
+        pass
+
+
+def load_battery_voltage():
+    """Read cached battery voltage (mV) from RTC memory. Returns 0 if unavailable."""
+    try:
+        from machine import RTC
+        data = RTC().memory()
+        if data and len(data) >= 12 and data[7] == _RTC_VALID_FLAG_V2:
+            return data[8] | (data[9] << 8)
+    except Exception:
+        pass
+    return 0
+
+
+def increment_wake_counter():
+    """Increment wake counter in RTC memory byte 10. Wraps at 255."""
+    try:
+        from machine import RTC
+        rtc = RTC()
+        data = bytearray(rtc.memory())
+        if len(data) >= 12 and data[7] == _RTC_VALID_FLAG_V2:
+            data[10] = (data[10] + 1) & 0xFF
+            rtc.memory(data)
+    except Exception:
+        pass
+
+
+def load_wake_counter():
+    """Read wake counter from RTC memory. Returns 0 if unavailable."""
+    try:
+        from machine import RTC
+        data = RTC().memory()
+        if data and len(data) >= 12 and data[7] == _RTC_VALID_FLAG_V2:
+            return data[10]
+    except Exception:
+        pass
+    return 0
 
 
 def unix_time_ms():
