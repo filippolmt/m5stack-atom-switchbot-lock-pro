@@ -13,7 +13,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [ ] **BATT-02**: LED arancione lampeggia quando tensione batteria scende sotto soglia low-battery (~3.3V)
 - [ ] **BATT-03**: Tensione batteria stampata su seriale ad ogni wake per diagnostica
 - [ ] **BATT-04**: Contatore wake cycle memorizzato in RTC memory (incrementato ad ogni pressione)
-- [ ] **BATT-05**: Layout RTC memory esteso da 8 a 12 byte con backward compatibility (flag 0xBB)
+- [x] **BATT-05**: Layout RTC memory esteso da 8 a 12 byte con backward compatibility (flag 0xBB)
 
 ### LED Optimization
 
@@ -72,7 +72,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | BATT-02 | Phase 3 | Pending |
 | BATT-03 | Phase 2 | Pending |
 | BATT-04 | Phase 4 | Pending |
-| BATT-05 | Phase 1 | Pending |
+| BATT-05 | Phase 1 | Complete |
 | LED-01 | Phase 5 | Pending |
 | LED-02 | Phase 5 | Pending |
 | LED-03 | Phase 3 | Pending |
