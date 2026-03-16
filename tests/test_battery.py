@@ -115,3 +115,65 @@ def test_battery_voltage_printed_to_serial(capsys):
         assert "3800" in captured.out
     finally:
         FakeADC.__init__ = original
+
+
+# ---------------------------------------------------------------------------
+# Low-battery warning tests (check_low_battery + BATTERY_LOW_MV)
+# ---------------------------------------------------------------------------
+
+
+class MockLED:
+    """Mock StatusLED that records blink_orange calls."""
+
+    def __init__(self):
+        self.blink_orange_calls = []
+
+    def blink_orange(self, **kwargs):
+        self.blink_orange_calls.append(kwargs)
+
+
+def test_low_battery_warning_triggers():
+    """When battery_mv=3000 (below 3300), led.blink_orange() is called."""
+    led = MockLED()
+    main.check_low_battery(3000, led)
+    assert len(led.blink_orange_calls) == 1, (
+        f"Expected 1 blink_orange call, got {len(led.blink_orange_calls)}"
+    )
+
+
+def test_low_battery_warning_no_trigger_above_threshold():
+    """When battery_mv=3500 (above 3300), led.blink_orange() is NOT called."""
+    led = MockLED()
+    main.check_low_battery(3500, led)
+    assert len(led.blink_orange_calls) == 0, (
+        "blink_orange should not be called when battery is above threshold"
+    )
+
+
+def test_low_battery_warning_no_trigger_on_adc_failure():
+    """When battery_mv=0 (ADC failed), led.blink_orange() is NOT called."""
+    led = MockLED()
+    main.check_low_battery(0, led)
+    assert len(led.blink_orange_calls) == 0, (
+        "blink_orange should not be called on ADC failure (0 mV)"
+    )
+
+
+def test_low_battery_warning_serial_output(capsys):
+    """When battery_mv=3000, serial output contains 'WARNING' and 'Low battery'."""
+    led = MockLED()
+    main.check_low_battery(3000, led)
+    captured = capsys.readouterr()
+    assert "WARNING" in captured.out, "Expected 'WARNING' in serial output"
+    assert "Low battery" in captured.out or "low battery" in captured.out.lower(), (
+        "Expected low battery message in serial output"
+    )
+
+
+def test_low_battery_warning_at_threshold():
+    """When battery_mv=3300 (exactly at threshold), led.blink_orange() is NOT called."""
+    led = MockLED()
+    main.check_low_battery(3300, led)
+    assert len(led.blink_orange_calls) == 0, (
+        "blink_orange should not be called at exact threshold (only below)"
+    )
