@@ -29,6 +29,9 @@ import hashlib
 _RTC_VALID_FLAG = 0xAA
 _RTC_VALID_FLAG_V2 = 0xBB  # Extended 12-byte layout
 
+# Default LED brightness (0-255). Halved from 64 to reduce NeoPixel current draw.
+LED_BRIGHTNESS = 32
+
 # Try to use hmac if available, otherwise fall back to the manual version
 try:
     import hmac
@@ -254,7 +257,7 @@ def check_low_battery(battery_mv, led):
     """Blink orange LED if battery is below threshold. Call AFTER normal LED feedback."""
     if battery_mv > 0 and battery_mv < BATTERY_LOW_MV:
         print(f"WARNING: Low battery ({battery_mv}mV < {BATTERY_LOW_MV}mV)")
-        led.blink_orange(times=3, on_ms=200, off_ms=150)
+        led.blink_orange(times=3, on_ms=100, off_ms=75)
 
 
 def unix_time_ms():
@@ -301,7 +304,7 @@ def hmac_sha256_digest(secret_bytes, msg_bytes):
 
 
 class StatusLED:
-    def __init__(self, pin_num=27, brightness=64):
+    def __init__(self, pin_num=27, brightness=LED_BRIGHTNESS):
         import neopixel
 
         self.brightness = brightness  # 0-255
@@ -349,25 +352,25 @@ class StatusLED:
             self.off()
             time.sleep_ms(off_ms)
 
-    def blink_red(self, times=3, on_ms=200, off_ms=200):
+    def blink_red(self, times=3, on_ms=100, off_ms=100):
         self._blink(self.red, times, on_ms, off_ms)
 
-    def blink_green(self, times=1, on_ms=300, off_ms=100):
+    def blink_green(self, times=1, on_ms=150, off_ms=50):
         self._blink(self.green, times, on_ms, off_ms)
 
-    def blink_blue(self, times=2, on_ms=200, off_ms=200):
+    def blink_blue(self, times=2, on_ms=100, off_ms=100):
         self._blink(self.blue, times, on_ms, off_ms)
 
-    def blink_yellow(self, times=2, on_ms=300, off_ms=200):
+    def blink_yellow(self, times=2, on_ms=150, off_ms=100):
         self._blink(self.yellow, times, on_ms, off_ms)
 
-    def blink_orange(self, times=3, on_ms=300, off_ms=200):
+    def blink_orange(self, times=3, on_ms=150, off_ms=100):
         self._blink(self.orange, times, on_ms, off_ms)
 
-    def blink_purple(self, times=2, on_ms=200, off_ms=200):
+    def blink_purple(self, times=2, on_ms=100, off_ms=100):
         self._blink(self.purple, times, on_ms, off_ms)
 
-    def blink_fast_red(self, times=6, on_ms=100, off_ms=100):
+    def blink_fast_red(self, times=6, on_ms=50, off_ms=50):
         """Fast red blink for auth errors (401)"""
         self._blink(self.red, times, on_ms, off_ms)
 
@@ -646,7 +649,6 @@ LONG_PRESS_MS = 1000
 # Low battery warning threshold (mV)
 BATTERY_LOW_MV = 3300
 
-
 def measure_button_press(button_gpio, led, timeout_ms=5000):
     """
     Measure how long the button is held after wake.
@@ -713,6 +715,11 @@ def handle_button_wake(led):
     print("WAKE FROM DEEP SLEEP - Button pressed!")
     print("=" * 50)
 
+    # Increment wake counter (simple RTC byte write, no system heap impact)
+    increment_wake_counter()
+    wake_count = load_wake_counter()
+    print(f"Wake #{wake_count}")
+
     # Measure button press duration (with visual feedback)
     press_duration = measure_button_press(BUTTON_GPIO, led)
     is_lock = press_duration >= LONG_PRESS_MS
@@ -738,7 +745,7 @@ def handle_button_wake(led):
                         cached_channel=cached_channel):
         print("✗ Cannot connect to Wi-Fi")
         led.off()
-        led.blink_orange(times=3, on_ms=300, off_ms=200)
+        led.blink_orange(times=3, on_ms=150, off_ms=100)
         set_cpu_freq(80)
         return "wifi_error"
 
@@ -764,7 +771,7 @@ def handle_button_wake(led):
         if not ntp_ok:
             print("⚠ NTP sync failed, attempting anyway...")
             led.off()
-            led.blink_yellow(times=2, on_ms=300, off_ms=200)
+            led.blink_yellow(times=2, on_ms=150, off_ms=100)
             if is_lock:
                 led.purple()
             else:
@@ -788,7 +795,7 @@ def handle_button_wake(led):
     # Read battery voltage (safe: WiFi is off, TLS is done)
     battery_mv = read_battery_voltage()
     if battery_mv > 0:
-        print(f"Battery: {battery_mv}mV")
+        print(f"Battery: {battery_mv}mV | Wake #{wake_count}")
         save_battery_voltage(battery_mv)
     else:
         print("Battery: read failed")
@@ -798,19 +805,19 @@ def handle_button_wake(led):
     if result == "success":
         if is_lock:
             print("✓ Door locked successfully!")
-            led.blink_purple(times=2, on_ms=300, off_ms=100)
+            led.blink_purple(times=2, on_ms=150, off_ms=50)
         else:
             print("✓ Door unlocked successfully!")
-            led.blink_green(times=2, on_ms=300, off_ms=100)
+            led.blink_green(times=2, on_ms=150, off_ms=50)
     elif result == "auth_error":
         print("✗ Authentication error (401)")
-        led.blink_fast_red(times=6, on_ms=100, off_ms=100)
+        led.blink_fast_red(times=6, on_ms=50, off_ms=50)
     elif result == "time_error":
         print("✗ Time sync error")
-        led.blink_yellow(times=4, on_ms=200, off_ms=200)
+        led.blink_yellow(times=4, on_ms=100, off_ms=100)
     else:  # api_error or other
         print("✗ API error")
-        led.blink_red(times=3, on_ms=200, off_ms=200)
+        led.blink_red(times=3, on_ms=100, off_ms=100)
 
     # Low battery warning (after normal feedback, before deep sleep)
     check_low_battery(battery_mv, led)
@@ -834,7 +841,7 @@ def main():
     3. If no (fresh boot): show startup message, go to sleep
     """
     # Initialize status LED first for immediate feedback
-    led = StatusLED(pin_num=27, brightness=64)
+    led = StatusLED(pin_num=27, brightness=LED_BRIGHTNESS)
 
     # Check wake reason
     if reset_cause() == DEEPSLEEP_RESET:
@@ -854,8 +861,8 @@ def main():
         print("  Long press  (>1s) = LOCK   (purple LED)")
 
         # Brief LED flash to indicate ready (green then purple)
-        led.blink_green(times=1, on_ms=300, off_ms=100)
-        led.blink_purple(times=1, on_ms=300, off_ms=100)
+        led.blink_green(times=1, on_ms=150, off_ms=50)
+        led.blink_purple(times=1, on_ms=150, off_ms=50)
 
     # Always return to deep sleep
     led.off()
