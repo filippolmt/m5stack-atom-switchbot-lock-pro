@@ -4,219 +4,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MicroPython firmware for M5Stack ATOM Lite (ESP32) that controls a SwitchBot Lock Pro via the SwitchBot API v1.1. Uses deep sleep for ultra-low power consumption (~10uA idle).
-
-- **Short press (<1s)**: UNLOCK the door
-- **Long press (≥1s)**: LOCK the door
-
-Device wakes on button press, measures hold duration, executes lock/unlock, then returns to deep sleep.
+MicroPython firmware for M5Stack ATOM Lite (ESP32) controlling a SwitchBot Lock Pro via API v1.1. Single-file architecture (`main.py`) with deep sleep between button presses. Short press = UNLOCK, long press (≥1s) = LOCK.
 
 ## Development Commands
 
-### Upload to Device
 ```bash
+# Tests (Docker, no hardware needed)
+make test                                              # 106 tests in Docker
+python -m pytest tests/test_battery.py::test_name -v   # Single test locally
+
+# Upload to device
 mpremote connect /dev/cu.usbserial-XXXX cp main.py :main.py
 mpremote connect /dev/cu.usbserial-XXXX cp config.py :config.py
 ```
 
-### Run/Test via Serial
-```bash
-mpremote connect /dev/cu.usbserial-XXXX run main.py
-# Or connect serial terminal:
-screen /dev/cu.usbserial-XXXX 115200
-```
-
-### Flash MicroPython Firmware (One-time)
-```bash
-esptool --port $PORT --baud 460800 erase-flash
-esptool --port $PORT --baud 460800 write_flash 0x1000 M5STACK_ATOM-*.bin
-```
-
-## Architecture
-
-**Single-file architecture** (`main.py`) with deep sleep for minimal power consumption:
-
-### Core Components
-1. **StatusLED** - RGB NeoPixel on GPIO 27 with multicolor feedback
-2. **SwitchBotController** - API v1.1 authentication (HMAC-SHA256) and HTTP
-3. **RTC Memory** - Caches Wi-Fi BSSID for fast reconnect + channel for diagnostics (survives deep sleep)
-
-### Data Flow
-```
-Boot/Wake
-    ↓
-Check reset_cause()
-    ↓
-┌─────────────────────────────────────┐
-│ DEEPSLEEP_RESET (button press)      │
-│   1. Measure press duration         │
-│      - <1s = UNLOCK (green LED)     │
-│      - ≥1s = LOCK (purple LED)      │
-│   2. CPU → 160MHz                   │
-│   3. Wi-Fi connect (fast if cached) │
-│   4. NTP sync (skip if RTC valid)   │
-│   5. API lock/unlock (retry once)   │
-│   6. Wi-Fi disconnect               │
-│   7. CPU → 80MHz                    │
-│   8. ADC battery read (GPIO 33)     │
-│   9. LED feedback (color by result) │
-│  10. Low battery warning (if <3.3V) │
-│  11. NeoPixel GPIO hold LOW         │
-└─────────────────────────────────────┘
-    ↓
-Deep Sleep (wake on GPIO 39 LOW)
-```
-
-### Button Controls
-| Press Duration | Action | LED While Holding |
-|----------------|--------|-------------------|
-| < 1 second | UNLOCK | Green |
-| ≥ 1 second | LOCK | Purple |
-
-### LED Color Codes
-| Color | Meaning |
-|-------|---------|
-| Green (holding) | Short press - will UNLOCK |
-| Purple (holding) | Long press - will LOCK |
-| Blue | Wi-Fi connecting (normal scan) |
-| Cyan | Fast reconnect in progress |
-| Green (2 blinks) | Success - door unlocked |
-| Purple (2 blinks) | Success - door locked |
-| Yellow (2 blinks) | NTP sync failed (continuing) |
-| Yellow (4 blinks) | Time sync error |
-| Orange (3 blinks) | Wi-Fi timeout |
-| Orange (3 blinks, after feedback) | Low battery warning (<3.3V) |
-| Red (3 blinks) | API error |
-| Red (6 fast) | Auth error (401) |
-
-## Critical Implementation Details
-
-- **Deep sleep**: `esp32.wake_on_ext0()` on GPIO 39. Power: ~10uA sleep vs ~80-150mA active.
-- **Epoch conversion**: MicroPython uses year 2000 epoch, SwitchBot API requires Unix epoch (1970). `unix_time_ms()` detects epoch at call time via `time.gmtime(0)[0]` and adds `946684800` seconds offset when needed.
-- **RTC memory layout (v2, 12 bytes)**: Bytes 0-5 = BSSID, Byte 6 = channel (used for reconnect), Byte 7 = valid flag (0xBB for v2, 0xAA for legacy 8-byte), Bytes 8-9 = battery voltage (uint16 LE mV), Byte 10 = wake counter (uint8, wraps at 255), Byte 11 = reserved
-- **Battery monitoring**: ADC on GPIO 33 via `read_battery_voltage()` — reads AFTER WiFi disconnect only (see mbedTLS constraint). Atomic Battery Base uses 1:1 voltage divider (2x 1MOhm).
-- **Logging**: `log()` function replaces all `print()` calls. Controlled by `LOG_LEVEL` in config.py ("verbose"/"minimal"/"silent").
-- **Memory management**: `gc.collect()` after HTTP requests only. See **ESP32 System Heap / mbedTLS Constraint** below.
-
 ## ESP32 System Heap / mbedTLS Constraint (CRITICAL)
 
-The ESP32-PICO-D4 (no PSRAM) has two separate heaps: the **Python GC heap** (`gc.mem_free()`) and the **system heap** (used by the WiFi driver and mbedTLS for TLS/RSA operations). `gc.mem_free()` only reports the Python heap — the system heap is invisible to Python code.
+The ESP32-PICO-D4 has a **system heap** (invisible to Python) used by WiFi/mbedTLS for TLS/RSA. Fragmentation causes `MBEDTLS_ERR_MPI_ALLOC_FAILED`.
 
-**mbedTLS requires large contiguous blocks on the system heap** for RSA public key operations during the TLS handshake. If the system heap is fragmented, TLS fails with `MBEDTLS_ERR_MPI_ALLOC_FAILED` (-17040) or `MBEDTLS_ERR_RSA_PUBLIC_FAILED` / `MBEDTLS_ERR_PK_INVALID_PUBKEY`, even when Python heap shows 127KB+ free.
-
-### DO NOT do any of the following before `urequests.post()`:
-
-| Forbidden Pattern | Why It Breaks TLS |
-|---|---|
-| `gc.collect()` before POST | Frees Python objects whose finalizers release system heap memory mid-allocation, creating fragmentation gaps |
-| Module-level caching (e.g. `_IS_MP_EPOCH = time.gmtime(0)[0] == 2000`) | Changes system heap layout at boot, shifting where mbedTLS allocates |
-| `wlan.config(pm=0)` (WiFi PS_NONE) | Increases WiFi driver system heap usage, competing with mbedTLS |
-| `WDT(timeout=...)` | Allocates hardware timer resources from system heap, confirmed to cause MBEDTLS_ERR_MPI_ALLOC_FAILED |
-| `usocket.setdefaulttimeout()` | May interfere with TLS socket internals |
-| Extra `import` statements (e.g. `import urandom`) | Each import adds bytecode + module objects, shifting system heap layout at boot. Confirmed: adding `urandom` fallbacks to `random_bytes()` triggered MBEDTLS_ERR_MPI_ALLOC_FAILED |
-| `machine.ADC()` before POST | ADC initialization allocates DMA buffers on system heap. MUST be called AFTER WiFi disconnect and HTTPS POST completes |
+### NEVER do before `urequests.post()`:
+- `gc.collect()` — finalizers fragment system heap
+- Module-level caching/computation — shifts heap layout at boot
+- `machine.ADC()` — DMA buffer allocation on system heap
+- `WDT(timeout=...)` — hardware timer on system heap
+- Extra `import` statements — each shifts system heap layout
+- `wlan.config(pm=0)` — increases WiFi heap usage
 
 ### Safe patterns:
-- `gc.collect()` **after** HTTP requests (cleanup only)
-- BSSID caching via `wlan.config('bssid')` with `wlan.scan()` fallback (scan may help consolidate system heap)
-- Inline epoch detection inside `unix_time_ms()` (no module-level allocation)
-- Lazy imports inside functions (e.g. `random_bytes()`, static IP) instead of module-level
-- Minimal module-level globals — every global allocation shifts the system heap layout
-- ADC reads (`read_battery_voltage()`) AFTER WiFi disconnect — safe because TLS is done
-- `try: from config import X / except: X = default` for optional config — safe because config module is already loaded
-- `esp32.gpio_hold_en(Pin(27))` in `enter_deep_sleep()` — holds NeoPixel data pin LOW to reduce WS2812 quiescent current during sleep
-- `set_cpu_freq(80)` after WiFi disconnect, before LED feedback — saves ~15mA during blink sequences
+- `gc.collect()` AFTER HTTP requests only
+- Lazy imports inside functions, not module-level
+- ADC reads (`read_battery_voltage()`) AFTER WiFi disconnect
+- `try: from config import X / except: X = default` — config already loaded
+- Minimal module-level globals
 
-## Performance & Power Optimizations
+## RTC Memory Layout (v2, 12 bytes)
 
-| Optimization | Savings | Implementation |
-|--------------|---------|----------------|
-| Skip NTP | ~500ms-1s | `is_time_valid()` checks RTC year >= 2024 |
-| Fast reconnect | ~1-2s | BSSID cached in RTC memory (strongest RSSI, skips full AP scan) |
-| Static IP | ~500ms-1s | Optional `WIFI_STATIC_IP` in config.py (skips DHCP) |
-| CPU scaling | ~20% CPU power | 80MHz idle/LED, 160MHz only for Wi-Fi/API |
-| Early WiFi disconnect | ~100-120mA for ~800ms | WiFi off before LED feedback blinks |
-| Shorter LED blinks | ~400ms wake time | Halved blink durations (brightness 32) |
-| WiFi channel cache | ~100ms | Cached channel passed to `wlan.connect()` |
-| Log level control | ~50-100ms | `LOG_LEVEL = "silent"` skips UART transmission |
-| CPU 80MHz during LED | ~15mA saved | `set_cpu_freq(80)` after WiFi disconnect, before LED blinks |
-| Serial flush 20ms | ~80ms saved | Reduced from 100ms in `enter_deep_sleep()` |
-| NeoPixel GPIO hold | ~0.5-1mA sleep | `gpio_hold_en(27)` keeps LED data pin LOW during deep sleep |
-| Retry delay 300ms | ~200ms saved | Reduced from 500ms (only affects error retries) |
-| API retry | +reliability | Single retry, skip on 401 errors |
+| Bytes | Content | Flag |
+|-------|---------|------|
+| 0-5 | BSSID | |
+| 6 | WiFi channel | |
+| 7 | Valid flag | 0xBB (v2) or 0xAA (legacy 8-byte) |
+| 8-9 | Battery voltage (uint16 LE mV) | |
+| 10 | Wake counter (uint8, wraps 255) | |
+| 11 | Reserved | |
 
-**Result**: First press ~3-5s, subsequent presses ~1-2s
+## Configuration (`config.py`, git-ignored)
 
-## Key Functions
+Required: `WIFI_SSID`, `WIFI_PASSWORD`, `SWITCHBOT_TOKEN`, `SWITCHBOT_SECRET`, `SWITCHBOT_DEVICE_ID`, `BUTTON_GPIO`
 
-- `handle_button_wake(led)` - Main wake handler, measures press duration, lock/unlock
-- `measure_button_press(gpio, led)` - Measures button hold time with visual feedback
-- `connect_wifi()` - Wi-Fi with fast reconnect support
-- `save_wifi_config()` / `load_wifi_config()` - RTC memory cache (12-byte v2 layout)
-- `read_battery_voltage()` - ADC GPIO 33, returns millivolts (call AFTER WiFi disconnect)
-- `check_low_battery(battery_mv, led)` - Orange LED warning if below BATTERY_LOW_MV
-- `save_battery_voltage()` / `load_battery_voltage()` - RTC memory bytes 8-9
-- `increment_wake_counter()` / `load_wake_counter()` - RTC memory byte 10
-- `log(*args, level, **kwargs)` - Print with log level filtering
-- `send_command(command, retries)` - API call for "lock" or "unlock"
-- `set_cpu_freq(mhz)` - CPU frequency scaling (80/160/240)
-- `StatusLED` colors: `green()`, `red()`, `blue()`, `cyan()`, `yellow()`, `orange()`, `purple()`
-- `StatusLED` blinks: `blink_*()`, `blink_fast_red()`
-- `LONG_PRESS_MS` - Threshold constant (1000ms default)
+Optional: `WIFI_STATIC_IP`, `LED_BRIGHTNESS` (default 32), `BATTERY_LOW_MV` (default 3300), `LOG_LEVEL` ("verbose"/"minimal"/"silent")
 
-## Configuration
+## Testing Architecture
 
-Copy `config_template.py` to `config.py` and fill in credentials. **config.py is git-ignored**.
+`tests/conftest.py` injects fake MicroPython modules into `sys.modules` BEFORE `import main`. Key stubs: `FakeRTC` (variable-size memory), `FakeWLAN`, `FakeADC`, `FakeNeoPixel`. The `_reset_rtc` fixture resets RTC memory between tests.
 
-Required values:
-- `WIFI_SSID`, `WIFI_PASSWORD`
-- `SWITCHBOT_TOKEN`, `SWITCHBOT_SECRET` (from SwitchBot app)
-- `SWITCHBOT_DEVICE_ID`
-- `BUTTON_GPIO` (default: 39 for M5Stack ATOM)
+## Wake Cycle Data Flow
 
-Optional:
-- `WIFI_STATIC_IP` (tuple: IP, subnet, gateway, DNS). Skips DHCP negotiation, saves ~500ms-1s per connection. Example: `("192.168.1.100", "255.255.255.0", "192.168.1.1", "8.8.8.8")`
-- `LED_BRIGHTNESS` (int 0-255, default: 32). Controls NeoPixel brightness.
-- `BATTERY_LOW_MV` (int, default: 3300). Low battery warning threshold in millivolts.
-- `LOG_LEVEL` (string: "verbose"/"minimal"/"silent", default: "verbose"). Controls serial output verbosity.
-
-**Note**: `WIFI_TX_POWER` was removed due to ESP32 system heap constraints (see ESP32 mbedTLS section).
-
-## Testing
-
-### Automated Tests (Docker)
-```bash
-make test                              # Build image + run 106 tests in Docker (Python 3.13)
-make test-clean                        # Remove test Docker image
 ```
-
-### Run a Single Test (local, requires Python 3.13+)
-```bash
-python -m pytest tests/test_battery.py -v              # All tests in a file
-python -m pytest tests/test_battery.py::test_name -v   # Single test by name
-python -m pytest tests/ -k "wifi" -v                   # Tests matching keyword
+Boot → increment_wake_counter → measure_button_press → CPU 160MHz →
+WiFi connect (BSSID+channel cache) → NTP (skip if valid) →
+API lock/unlock → WiFi disconnect → CPU 80MHz →
+ADC battery read → LED feedback → low battery check →
+NeoPixel GPIO hold → Deep Sleep (GPIO 39)
 ```
-
-Tests run on CPython via hardware stubs injected in `tests/conftest.py`. No MicroPython or hardware required.
-
-| Test File | What It Covers |
-|-----------|----------------|
-| `test_epoch.py` | `unix_time_ms()`, epoch offset constant, inline epoch detection, gmtime-broken fallback |
-| `test_hmac.py` | `hmac_sha256_digest()` manual RFC 2104 vs stdlib |
-| `test_auth_headers.py` | `_build_auth_headers()` structure, HMAC signature |
-| `test_send_command.py` | HTTP retry, response.close(), 401 no-retry, attribute-raise cleanup |
-| `test_rtc_memory.py` | `save/load_wifi_config()` byte serialization |
-| `test_led.py` | `StatusLED._scale()` brightness math, brightness constant, blink defaults |
-| `test_battery.py` | ADC voltage reading, low-battery warning, configurable threshold |
-| `test_logging.py` | Log level filtering, kwargs passthrough, defaults |
-| `test_power_optimizations.py` | CPU freq reset, serial flush timing, GPIO hold, retry delay |
-| `test_wifi.py` | `connect_wifi()` timeout, already-connected, channel passing, fallback chain |
-
-### Test Architecture
-`tests/conftest.py` injects fake MicroPython modules (`machine`, `esp32`, `network`, `neopixel`, `ntptime`, `urequests`, `config`) into `sys.modules` BEFORE `import main`. This lets the entire firmware load on CPython unchanged. Key stubs: `FakeRTC` (variable-size memory), `FakeWLAN`, `FakeADC`, `FakeNeoPixel`. The `_reset_rtc` fixture resets RTC memory between tests.
-
-### Manual Validation (on hardware)
-1. Monitor serial output at 115200 baud
-2. Press button, observe LED and serial response
-3. First press: Full Wi-Fi scan + NTP sync
-4. Subsequent presses: Fast reconnect, NTP skipped
