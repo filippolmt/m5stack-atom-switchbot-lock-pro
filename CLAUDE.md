@@ -88,7 +88,9 @@ Deep Sleep (wake on GPIO 39 LOW)
 
 - **Deep sleep**: `esp32.wake_on_ext0()` on GPIO 39. Power: ~10uA sleep vs ~80-150mA active.
 - **Epoch conversion**: MicroPython uses year 2000 epoch, SwitchBot API requires Unix epoch (1970). `unix_time_ms()` detects epoch at call time via `time.gmtime(0)[0]` and adds `946684800` seconds offset when needed.
-- **RTC memory layout**: Bytes 0-5 = BSSID (used for reconnect), Byte 6 = channel (diagnostic only), Byte 7 = valid flag (0xAA)
+- **RTC memory layout (v2, 12 bytes)**: Bytes 0-5 = BSSID, Byte 6 = channel (used for reconnect), Byte 7 = valid flag (0xBB for v2, 0xAA for legacy 8-byte), Bytes 8-9 = battery voltage (uint16 LE mV), Byte 10 = wake counter (uint8, wraps at 255), Byte 11 = reserved
+- **Battery monitoring**: ADC on GPIO 33 via `read_battery_voltage()` — reads AFTER WiFi disconnect only (see mbedTLS constraint). Atomic Battery Base uses 1:1 voltage divider (2x 1MOhm).
+- **Logging**: `log()` function replaces all `print()` calls. Controlled by `LOG_LEVEL` in config.py ("verbose"/"minimal"/"silent").
 - **Memory management**: `gc.collect()` after HTTP requests only. See **ESP32 System Heap / mbedTLS Constraint** below.
 
 ## ESP32 System Heap / mbedTLS Constraint (CRITICAL)
@@ -107,6 +109,7 @@ The ESP32-PICO-D4 (no PSRAM) has two separate heaps: the **Python GC heap** (`gc
 | `WDT(timeout=...)` | Allocates hardware timer resources from system heap, confirmed to cause MBEDTLS_ERR_MPI_ALLOC_FAILED |
 | `usocket.setdefaulttimeout()` | May interfere with TLS socket internals |
 | Extra `import` statements (e.g. `import urandom`) | Each import adds bytecode + module objects, shifting system heap layout at boot. Confirmed: adding `urandom` fallbacks to `random_bytes()` triggered MBEDTLS_ERR_MPI_ALLOC_FAILED |
+| `machine.ADC()` before POST | ADC initialization allocates DMA buffers on system heap. MUST be called AFTER WiFi disconnect and HTTPS POST completes |
 
 ### Safe patterns:
 - `gc.collect()` **after** HTTP requests (cleanup only)
@@ -114,6 +117,8 @@ The ESP32-PICO-D4 (no PSRAM) has two separate heaps: the **Python GC heap** (`gc
 - Inline epoch detection inside `unix_time_ms()` (no module-level allocation)
 - Lazy imports inside functions (e.g. `random_bytes()`, static IP) instead of module-level
 - Minimal module-level globals — every global allocation shifts the system heap layout
+- ADC reads (`read_battery_voltage()`) AFTER WiFi disconnect — safe because TLS is done
+- `try: from config import X / except: X = default` for optional config — safe because config module is already loaded
 
 ## Performance & Power Optimizations
 
@@ -124,7 +129,9 @@ The ESP32-PICO-D4 (no PSRAM) has two separate heaps: the **Python GC heap** (`gc
 | Static IP | ~500ms-1s | Optional `WIFI_STATIC_IP` in config.py (skips DHCP) |
 | CPU scaling | ~20% CPU power | 80MHz idle/LED, 160MHz only for Wi-Fi/API |
 | Early WiFi disconnect | ~100-120mA for ~800ms | WiFi off before LED feedback blinks |
-| Shorter LED blinks | ~400ms wake time | Halved blink durations |
+| Shorter LED blinks | ~400ms wake time | Halved blink durations (brightness 32) |
+| WiFi channel cache | ~100ms | Cached channel passed to `wlan.connect()` |
+| Log level control | ~50-100ms | `LOG_LEVEL = "silent"` skips UART transmission |
 | API retry | +reliability | Single retry, skip on 401 errors |
 
 **Result**: First press ~3-5s, subsequent presses ~1-2s
@@ -134,7 +141,12 @@ The ESP32-PICO-D4 (no PSRAM) has two separate heaps: the **Python GC heap** (`gc
 - `handle_button_wake(led)` - Main wake handler, measures press duration, lock/unlock
 - `measure_button_press(gpio, led)` - Measures button hold time with visual feedback
 - `connect_wifi()` - Wi-Fi with fast reconnect support
-- `save_wifi_config()` / `load_wifi_config()` - RTC memory cache
+- `save_wifi_config()` / `load_wifi_config()` - RTC memory cache (12-byte v2 layout)
+- `read_battery_voltage()` - ADC GPIO 33, returns millivolts (call AFTER WiFi disconnect)
+- `check_low_battery(battery_mv, led)` - Orange LED warning if below BATTERY_LOW_MV
+- `save_battery_voltage()` / `load_battery_voltage()` - RTC memory bytes 8-9
+- `increment_wake_counter()` / `load_wake_counter()` - RTC memory byte 10
+- `log(*args, level, **kwargs)` - Print with log level filtering
 - `send_command(command, retries)` - API call for "lock" or "unlock"
 - `set_cpu_freq(mhz)` - CPU frequency scaling (80/160/240)
 - `StatusLED` colors: `green()`, `red()`, `blue()`, `cyan()`, `yellow()`, `orange()`, `purple()`
@@ -153,6 +165,9 @@ Required values:
 
 Optional:
 - `WIFI_STATIC_IP` (tuple: IP, subnet, gateway, DNS). Skips DHCP negotiation, saves ~500ms-1s per connection. Example: `("192.168.1.100", "255.255.255.0", "192.168.1.1", "8.8.8.8")`
+- `LED_BRIGHTNESS` (int 0-255, default: 32). Controls NeoPixel brightness.
+- `BATTERY_LOW_MV` (int, default: 3300). Low battery warning threshold in millivolts.
+- `LOG_LEVEL` (string: "verbose"/"minimal"/"silent", default: "verbose"). Controls serial output verbosity.
 
 **Note**: `WIFI_TX_POWER` was removed due to ESP32 system heap constraints (see ESP32 mbedTLS section).
 
@@ -160,7 +175,7 @@ Optional:
 
 ### Automated Tests (Docker)
 ```bash
-make test          # Build image + run 53 tests in Docker (Python 3.13)
+make test          # Build image + run 101 tests in Docker (Python 3.13)
 make test-clean    # Remove test Docker image
 ```
 
@@ -173,8 +188,10 @@ Tests run on CPython via hardware stubs injected in `tests/conftest.py`. No Micr
 | `test_auth_headers.py` | `_build_auth_headers()` structure, HMAC signature |
 | `test_send_command.py` | HTTP retry, response.close(), 401 no-retry, attribute-raise cleanup |
 | `test_rtc_memory.py` | `save/load_wifi_config()` byte serialization |
-| `test_led.py` | `StatusLED._scale()` brightness math |
-| `test_wifi.py` | `connect_wifi()` timeout, already-connected |
+| `test_led.py` | `StatusLED._scale()` brightness math, brightness constant, blink defaults |
+| `test_battery.py` | ADC voltage reading, low-battery warning, configurable threshold |
+| `test_logging.py` | Log level filtering, kwargs passthrough, defaults |
+| `test_wifi.py` | `connect_wifi()` timeout, already-connected, channel passing, fallback chain |
 
 ### Manual Validation (on hardware)
 1. Monitor serial output at 115200 baud

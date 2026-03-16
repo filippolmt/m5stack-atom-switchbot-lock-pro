@@ -6,15 +6,20 @@ This project provides a complete solution to integrate your M5Stack ATOM (ESP32)
 
 ## 🌟 Features
 
-- ✅ **Deep sleep mode** - Ultra-low power consumption (~10uA idle vs ~80mA active)
+- ✅ **Deep sleep mode** - Ultra-low power consumption (~10uA ESP32 idle)
 - ✅ **Wake on button press** - ESP32 wakes from deep sleep when button is pressed
 - ✅ **On-demand Wi-Fi** - Connects only when needed, disconnects immediately after API response
-- ✅ **Fast reconnect** - Caches Wi-Fi BSSID for ~1-2s faster reconnection after deep sleep
+- ✅ **Fast reconnect** - Caches Wi-Fi BSSID + channel for ~1-2s faster reconnection after deep sleep
 - ✅ **Optional static IP** - Skip DHCP negotiation for ~500ms-1s faster connection
-- ✅ **Multicolor LED feedback** - Different colors indicate status and errors
+- ✅ **Battery monitoring** - Reads voltage via ADC GPIO 33 (Atomic Battery Base compatible)
+- ✅ **Low battery warning** - Orange LED blinks when voltage drops below threshold
+- ✅ **Wake cycle counter** - Tracks usage count in RTC memory for diagnostics
+- ✅ **Configurable power profile** - LED brightness, battery thresholds, and logging via config.py
+- ✅ **Logging control** - Three levels: verbose/minimal/silent for production power savings
+- ✅ **Multicolor LED feedback** - Different colors indicate status and errors (brightness optimized)
 - ✅ **SwitchBot API v1.1** with signed token + secret headers
 - ✅ **Auto retry** - Retries API call once on failure
-- ✅ **Automated test suite** - 53 tests via Docker (Python 3.13 + pytest)
+- ✅ **Automated test suite** - 101 tests via Docker (Python 3.13 + pytest)
 - ✅ **CI/CD** - GitHub Actions runs tests on push/PR
 - ✅ **Complete setup guide** for VS Code + MicroPython
 
@@ -22,9 +27,10 @@ This project provides a complete solution to integrate your M5Stack ATOM (ESP32)
 
 ### Hardware
 
-- **M5Stack ATOM** (ESP32-PICO-D4)
+- **M5Stack ATOM Lite** (ESP32-PICO-D4)
 - USB Type-C cable
 - **SwitchBot Lock Pro** (set up and working)
+- **Atomic Battery Base** (200mAh, optional) - for portable battery-powered operation
 
 ### Software
 
@@ -73,6 +79,11 @@ BUTTON_GPIO = 39
 
 # Optional: static IP to skip DHCP (saves ~500ms-1s per connection)
 # WIFI_STATIC_IP = ("192.168.1.100", "255.255.255.0", "192.168.1.1", "8.8.8.8")
+
+# Power configuration (optional)
+# LED_BRIGHTNESS = 32        # 0-255, lower = less power
+# BATTERY_LOW_MV = 3300      # Low battery warning threshold (mV)
+# LOG_LEVEL = "verbose"      # "verbose", "minimal", or "silent"
 ```
 
 ### 3. Upload to the Device (mpremote)
@@ -133,10 +144,14 @@ Then press the button on the M5Stack ATOM to control the lock.
    - Disconnects Wi-Fi immediately after response
    - LED feedback based on result (Wi-Fi already off)
    - Returns to deep sleep
-3. **Power consumption**:
-   - Deep sleep: ~10uA (can run months on battery)
+3. **Battery monitoring** (after API call):
+   - Reads battery voltage via ADC on GPIO 33
+   - Orange LED warning if below threshold (default 3.3V)
+   - Voltage and wake count logged to serial
+4. **Power consumption**:
+   - Deep sleep: ~10uA (ESP32 only) + board quiescent current
    - Active (Wi-Fi + API call): ~80-150mA for 2-4 seconds
-   - LED feedback: ~25mA for ~0.5s (Wi-Fi already off)
+   - LED feedback: ~12mA for ~0.25s (brightness 32, Wi-Fi already off)
 
 ## 🎮 Button Controls
 
@@ -158,8 +173,49 @@ Then press the button on the M5Stack ATOM to control the lock.
 | 🟡 **Yellow (2 blinks)** | NTP sync failed (continuing anyway) |
 | 🟡 **Yellow (4 blinks)** | Time sync error |
 | 🟠 **Orange (3 blinks)** | Wi-Fi connection timeout |
+| 🟠 **Orange (3 blinks, after feedback)** | Low battery warning (<3.3V) |
 | 🔴 **Red (3 blinks)** | API error |
 | 🔴 **Red (6 fast blinks)** | Authentication error (401) |
+
+## 🔋 Atomic Battery Base
+
+The project supports the [M5Stack Atomic Battery Base](https://docs.m5stack.com/en/atom/Atomic%20Battery%20Base) (200mAh, 3.7V) for portable operation.
+
+### Specifications
+
+| Property | Value |
+|----------|-------|
+| Battery | 3.7V @ 200mAh LiPo |
+| Boost converter | ETA9085E10 (5V output) |
+| Charging IC | LGS4056HDA (USB-C, 223mA) |
+| Standby current | 2.55uA (boost converter) |
+| Battery monitoring | GPIO 33 via 1:1 voltage divider (2x 1MOhm) |
+
+### Realistic Battery Life
+
+**Important:** The M5Stack ATOM Lite draws **4-11mA in deep sleep** (not 10uA) due to the always-on USB/serial chip and NeoPixel quiescent current. With the 200mAh battery:
+
+- **Estimated autonomy: 12-40 hours** depending on board revision
+- Wake cycle consumption (~80-150mA for 1-5s) is <0.5% of total drain
+- **Sleep current dominates** — firmware optimizations provide marginal improvement
+
+### Charging
+
+- Connect USB-C to charge (blue LED = charging, green LED = full)
+- Dip switch: **boost** for normal operation, **charge** when connected to USB
+- Full charge: ~1 hour at 223mA
+
+### Power Configuration
+
+Tune power behavior in `config.py`:
+
+```python
+LED_BRIGHTNESS = 32        # 0-255 (default 32, lower = less power)
+BATTERY_LOW_MV = 3300      # Low battery warning threshold (mV)
+LOG_LEVEL = "minimal"      # "verbose", "minimal", or "silent"
+```
+
+Setting `LOG_LEVEL = "silent"` saves ~50-100ms per wake cycle by skipping UART transmission.
 
 ## 📡 SwitchBot API
 
@@ -255,7 +311,7 @@ make test-clean    # Remove the test Docker image
 
 Tests also run automatically via GitHub Actions on every push and PR to `main`.
 
-**What's tested** (53 test cases):
+**What's tested** (101 test cases):
 
 | Area | Tests |
 |------|-------|
@@ -263,9 +319,11 @@ Tests also run automatically via GitHub Actions on every push and PR to `main`.
 | HMAC-SHA256 | Manual RFC 2104 vs stdlib, long keys, empty inputs |
 | Auth headers | Required keys, uppercase Base64 signature, timestamp format |
 | HTTP send_command | Retry logic, 401 no-retry, response cleanup, attribute-raise resilience |
-| RTC memory | Save/load roundtrip, invalid BSSID, channel bounds |
-| LED brightness | `_scale()` math, clamping at 255 |
-| Wi-Fi connect | Already-connected, timeout, fast reconnect, bssid fallback |
+| RTC memory | Save/load roundtrip, 12-byte layout migration, battery voltage, wake counter |
+| LED brightness | `_scale()` math, brightness constant, blink defaults |
+| Battery monitoring | ADC voltage reading, low-battery warning, configurable threshold |
+| Logging | Log level filtering, kwargs passthrough, defaults |
+| Wi-Fi connect | Already-connected, timeout, fast reconnect, channel passing, fallback chain |
 
 ## 🛠️ Troubleshooting
 
