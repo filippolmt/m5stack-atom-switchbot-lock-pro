@@ -9,9 +9,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Battery Monitoring
 
-- [ ] **BATT-01**: Firmware legge tensione batteria via ADC su GPIO 33 (voltage divider 1:1) ad ogni ciclo wake
+- [x] **BATT-01**: Firmware legge tensione batteria via ADC su GPIO 33 (voltage divider 1:1) ad ogni ciclo wake
 - [ ] **BATT-02**: LED arancione lampeggia quando tensione batteria scende sotto soglia low-battery (~3.3V)
-- [ ] **BATT-03**: Tensione batteria stampata su seriale ad ogni wake per diagnostica
+- [x] **BATT-03**: Tensione batteria stampata su seriale ad ogni wake per diagnostica
 - [ ] **BATT-04**: Contatore wake cycle memorizzato in RTC memory (incrementato ad ogni pressione)
 - [x] **BATT-05**: Layout RTC memory esteso da 8 a 12 byte con backward compatibility (flag 0xBB)
 
@@ -68,9 +68,9 @@ Deferred to future release. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BATT-01 | Phase 2 | Pending |
+| BATT-01 | Phase 2 | Complete |
 | BATT-02 | Phase 3 | Pending |
-| BATT-03 | Phase 2 | Pending |
+| BATT-03 | Phase 2 | Complete |
 | BATT-04 | Phase 4 | Pending |
 | BATT-05 | Phase 1 | Complete |
 | LED-01 | Phase 5 | Pending |

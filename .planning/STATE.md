@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Phase 2 context gathered
-last_updated: "2026-03-16T20:16:28.050Z"
-last_activity: 2026-03-16 — Phase 1 Plan 1 complete
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-16T20:29:24.775Z"
+last_activity: 2026-03-16 — Phase 2 Plan 1 complete
 progress:
   total_phases: 9
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** Massima durata della batteria mantenendo l'affidabilita del lock/unlock
-**Current focus:** Phase 1: RTC Memory Layout Extension
+**Current focus:** Phase 2: Battery Voltage Reading
 
 ## Current Position
 
-Phase: 1 of 9 (RTC Memory Layout Extension)
+Phase: 2 of 9 (Battery Voltage Reading)
 Plan: 1 of 1 in current phase (COMPLETE)
-Status: Phase 1 complete
-Last activity: 2026-03-16 — Phase 1 Plan 1 complete
+Status: Phase 2 complete
+Last activity: 2026-03-16 — Phase 2 Plan 1 complete
 
 Progress: [██████████] 100%
 
@@ -50,6 +50,7 @@ Progress: [██████████] 100%
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 02-battery-voltage-reading P01 | 2min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,9 @@ Recent decisions affecting current work:
 - Little-endian uint16 for battery voltage in RTC memory (matches ESP32 native endianness)
 - Manual byte manipulation instead of struct import for RTC memory (mbedTLS heap safety)
 - FakeRTC fixture default kept at bytearray(8) to simulate old-layout devices in tests
+- [Phase 02-battery-voltage-reading]: ADC read placed after WiFi disconnect for mbedTLS heap safety and RF interference avoidance
+- [Phase 02-battery-voltage-reading]: 4-sample ADC averaging for noise reduction with negligible time cost
+- [Phase 02-battery-voltage-reading]: Lazy import of machine.ADC inside read_battery_voltage() function body
 
 ### Pending Todos
 
@@ -77,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T20:16:28.048Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-battery-voltage-reading/02-CONTEXT.md
+Last session: 2026-03-16T20:29:24.774Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
