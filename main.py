@@ -204,7 +204,7 @@ def hmac_sha256_digest(secret_bytes, msg_bytes):
 
 
 class StatusLED:
-    def __init__(self, pin_num=27, brightness=64):
+    def __init__(self, pin_num=27, brightness=32):
         import neopixel
 
         self.brightness = brightness  # 0-255
@@ -252,25 +252,25 @@ class StatusLED:
             self.off()
             time.sleep_ms(off_ms)
 
-    def blink_red(self, times=3, on_ms=200, off_ms=200):
+    def blink_red(self, times=3, on_ms=100, off_ms=100):
         self._blink(self.red, times, on_ms, off_ms)
 
-    def blink_green(self, times=1, on_ms=300, off_ms=100):
+    def blink_green(self, times=1, on_ms=150, off_ms=50):
         self._blink(self.green, times, on_ms, off_ms)
 
-    def blink_blue(self, times=2, on_ms=200, off_ms=200):
+    def blink_blue(self, times=2, on_ms=100, off_ms=100):
         self._blink(self.blue, times, on_ms, off_ms)
 
-    def blink_yellow(self, times=2, on_ms=300, off_ms=200):
+    def blink_yellow(self, times=2, on_ms=150, off_ms=100):
         self._blink(self.yellow, times, on_ms, off_ms)
 
-    def blink_orange(self, times=3, on_ms=300, off_ms=200):
+    def blink_orange(self, times=3, on_ms=150, off_ms=100):
         self._blink(self.orange, times, on_ms, off_ms)
 
-    def blink_purple(self, times=2, on_ms=200, off_ms=200):
+    def blink_purple(self, times=2, on_ms=100, off_ms=100):
         self._blink(self.purple, times, on_ms, off_ms)
 
-    def blink_fast_red(self, times=6, on_ms=100, off_ms=100):
+    def blink_fast_red(self, times=6, on_ms=50, off_ms=50):
         """Fast red blink for auth errors (401)"""
         self._blink(self.red, times, on_ms, off_ms)
 
@@ -529,7 +529,7 @@ def enter_deep_sleep(button_gpio):
     esp32.wake_on_ext0(pin=wake_pin, level=esp32.WAKEUP_ALL_LOW)
 
     # Small delay to allow serial output to flush
-    time.sleep_ms(100)
+    time.sleep_ms(20)
 
     # Enter deep sleep indefinitely (wake only on button)
     deepsleep()
@@ -638,7 +638,7 @@ def handle_button_wake(led):
                         cached_channel=cached_channel):
         print("✗ Cannot connect to Wi-Fi")
         led.off()
-        led.blink_orange(times=3, on_ms=300, off_ms=200)
+        led.blink_orange(times=3, on_ms=150, off_ms=100)
         set_cpu_freq(80)
         return "wifi_error"
 
@@ -664,7 +664,7 @@ def handle_button_wake(led):
         if not ntp_ok:
             print("⚠ NTP sync failed, attempting anyway...")
             led.off()
-            led.blink_yellow(times=2, on_ms=300, off_ms=200)
+            led.blink_yellow(times=2, on_ms=150, off_ms=100)
             if is_lock:
                 led.purple()
             else:
@@ -690,16 +690,16 @@ def handle_button_wake(led):
     if result == "success":
         if is_lock:
             print("✓ Door locked successfully!")
-            led.blink_purple(times=2, on_ms=300, off_ms=100)
+            led.blink_purple(times=2, on_ms=150, off_ms=50)
         else:
             print("✓ Door unlocked successfully!")
-            led.blink_green(times=2, on_ms=300, off_ms=100)
+            led.blink_green(times=2, on_ms=150, off_ms=50)
     elif result == "auth_error":
         print("✗ Authentication error (401)")
-        led.blink_fast_red(times=6, on_ms=100, off_ms=100)
+        led.blink_fast_red(times=6, on_ms=50, off_ms=50)
     elif result == "time_error":
         print("✗ Time sync error")
-        led.blink_yellow(times=4, on_ms=200, off_ms=200)
+        led.blink_yellow(times=4, on_ms=100, off_ms=100)
     else:  # api_error or other
         print("✗ API error")
         led.blink_red(times=3, on_ms=200, off_ms=200)
@@ -723,7 +723,7 @@ def main():
     3. If no (fresh boot): show startup message, go to sleep
     """
     # Initialize status LED first for immediate feedback
-    led = StatusLED(pin_num=27, brightness=64)
+    led = StatusLED(pin_num=27, brightness=32)
 
     # Check wake reason
     if reset_cause() == DEEPSLEEP_RESET:
@@ -743,8 +743,8 @@ def main():
         print("  Long press  (>1s) = LOCK   (purple LED)")
 
         # Brief LED flash to indicate ready (green then purple)
-        led.blink_green(times=1, on_ms=300, off_ms=100)
-        led.blink_purple(times=1, on_ms=300, off_ms=100)
+        led.blink_green(times=1, on_ms=150, off_ms=50)
+        led.blink_purple(times=1, on_ms=150, off_ms=50)
 
     # Always return to deep sleep
     led.off()

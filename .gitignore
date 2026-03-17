@@ -209,3 +209,4 @@ __marimo__/
 # MicroPython specific
 config.py
 *.pyc
+*.bin
