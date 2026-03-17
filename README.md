@@ -25,10 +25,11 @@ This project provides a complete solution to integrate your M5Stack ATOM (ESP32)
 - **M5Stack ATOM** (ESP32-PICO-D4)
 - USB Type-C cable
 - **SwitchBot Lock Pro** (set up and working)
+- **Atomic Battery Base** (200mAh, optional) - for portable battery-powered operation
 
 ### Software
 
-- **MicroPython v1.24.x or later** (tested with v1.24.1) for ESP32
+- **MicroPython v1.24.x or later** — download from [micropython.org/download/M5STACK_ATOM](https://micropython.org/download/M5STACK_ATOM/)
 - **VS Code** (optional) for editing
 - `mpremote` for file upload and execution
 - Python 3.x on your computer
@@ -160,6 +161,34 @@ Then press the button on the M5Stack ATOM to control the lock.
 | 🟠 **Orange (3 blinks)** | Wi-Fi connection timeout |
 | 🔴 **Red (3 blinks)** | API error |
 | 🔴 **Red (6 fast blinks)** | Authentication error (401) |
+
+## 🔋 Atomic Battery Base (Optional)
+
+The project supports the [M5Stack Atomic Battery Base](https://docs.m5stack.com/en/atom/Atomic%20Battery%20Base) (200mAh, 3.7V) for portable battery-powered operation.
+
+### Specifications
+
+| Property | Value |
+|----------|-------|
+| Battery | 3.7V @ 200mAh LiPo |
+| Boost converter | ETA9085E10 (5V output) |
+| Charging IC | LGS4056HDA (USB-C, 223mA) |
+| Standby current | 2.55uA (boost converter) |
+
+### Realistic Battery Life
+
+**Important:** The M5Stack ATOM Lite draws **4-11mA in deep sleep** (not 10uA) due to the always-on USB/serial chip. With the 200mAh battery:
+
+- **Estimated autonomy: 18-50 hours** depending on board revision
+- Wake cycle consumption (~80-150mA for 1-5s) is <0.5% of total drain
+- **Sleep current dominates** — the USB/serial chip (3-5mA) is the main drain and cannot be disabled in software
+- For longer battery life, consider a larger battery (750-1000mAh → 3-8 days)
+
+### Charging
+
+- Connect USB-C to charge (blue LED = charging, green LED = full)
+- Dip switch: **boost** for normal operation, **charge** when connected to USB
+- Full charge: ~1 hour at 223mA
 
 ## 📡 SwitchBot API
 
